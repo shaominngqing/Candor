@@ -2,6 +2,27 @@ import AppKit
 @preconcurrency import QuickLookUI
 import SwiftUI
 
+enum CandorIcon {
+    static let image: NSImage = {
+        guard let url = Bundle.main.url(forResource: "CandorIcon", withExtension: "icns"),
+              let image = NSImage(contentsOf: url) else {
+            return NSApplication.shared.applicationIconImage
+        }
+        return image
+    }()
+}
+
+struct CandorAppIcon: View {
+    let size: CGFloat
+
+    var body: some View {
+        Image(nsImage: CandorIcon.image)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+    }
+}
+
 struct PageHeader: View {
     let title: String
     let subtitle: String
@@ -9,7 +30,7 @@ struct PageHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 28, weight: .bold))
             Text(subtitle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -64,13 +85,14 @@ struct ApplicationIcon: View {
     }
 }
 
-struct SafetyBadge: View {
-    let level: SafetyLevel
+struct CleanupRiskBadge: View {
+    let level: CleanupRiskLevel
 
     private var color: Color {
         switch level {
-        case .safe: .green
-        case .review: .orange
+        case .disposable: .green
+        case .regenerable: .teal
+        case .reacquirable: .orange
         case .sensitive: .red
         }
     }
@@ -133,17 +155,52 @@ struct EmptyStateView: View {
     }
 }
 
-private struct CleanupItemRow: View {
+struct AnalysisPendingView: View {
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text(title)
+                .font(.headline)
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(30)
+    }
+}
+
+struct CleanupItemRow: View {
     @Binding var item: CleanupItem
+    var isExcluded = false
+    var onSelectionChange: ((Bool) -> Void)?
+    var onToggleExclusion: (() -> Void)?
+
+    private var selection: Binding<Bool> {
+        Binding(
+            get: { item.isSelected },
+            set: { value in
+                if let onSelectionChange {
+                    onSelectionChange(value)
+                } else {
+                    item.isSelected = value
+                }
+            }
+        )
+    }
 
     var body: some View {
         HStack(spacing: 12) {
-            Toggle("", isOn: $item.isSelected)
+            Toggle("", isOn: selection)
                 .labelsHidden()
+                .disabled(isExcluded)
 
             Image(systemName: item.category.systemImage)
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(item.safety == .safe ? Color.teal : Color.orange)
+                .foregroundStyle(riskColor(item.risk))
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -162,9 +219,13 @@ private struct CleanupItemRow: View {
                 Text(item.explanation)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(1)
+                Text(item.impact)
+                    .font(.caption)
+                    .foregroundStyle(item.risk >= .reacquirable ? .secondary : .tertiary)
+                    .lineLimit(1)
                 if let modifiedAt = item.modifiedAt {
-                    Text("最近更新：\(modifiedAt.shortChineseText)")
+                    Text("更新于 \(modifiedAt.shortChineseText)")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -175,29 +236,49 @@ private struct CleanupItemRow: View {
             VStack(alignment: .trailing, spacing: 7) {
                 Text(ByteFormatting.string(item.size))
                     .font(.callout.monospacedDigit())
-                SafetyBadge(level: item.safety)
+                if isExcluded {
+                    Label("已排除", systemImage: "minus.circle.fill")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                } else {
+                    CleanupRiskBadge(level: item.risk)
+                }
             }
             .fixedSize(horizontal: true, vertical: false)
 
-            Button {
-                QuickLookPreviewer.shared.preview(item.url)
+            Menu {
+                Button("快速预览") { QuickLookPreviewer.shared.preview(item.url) }
+                Button("在 Finder 中显示") {
+                    NSWorkspace.shared.activateFileViewerSelecting([item.url])
+                }
+                if let onToggleExclusion {
+                    Divider()
+                    Button(isExcluded ? "取消排除" : "始终排除此项目") {
+                        onToggleExclusion()
+                    }
+                }
             } label: {
-                Image(systemName: "eye")
+                Image(systemName: "ellipsis")
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
-            .help("快速预览")
-
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([item.url])
-            } label: {
-                Image(systemName: "magnifyingglass")
-            }
-            .buttonStyle(.borderless)
-            .help("在 Finder 中查看")
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("更多操作")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .contentShape(Rectangle())
+    }
+
+    private func riskColor(_ risk: CleanupRiskLevel) -> Color {
+        switch risk {
+        case .disposable: .green
+        case .regenerable: .teal
+        case .reacquirable: .orange
+        case .sensitive: .red
+        }
     }
 }
 

@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>zh_CN</string>
     <key>CFBundleDisplayName</key>
-    <string>余净</string>
+    <string>Candor</string>
     <key>CFBundleExecutable</key>
     <string>YuJing</string>
     <key>CFBundleIdentifier</key>
@@ -13,13 +13,15 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>余净</string>
+    <string>Candor</string>
+    <key>CFBundleIconFile</key>
+    <string>CandorIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.8.0</string>
+    <string>0.12.3</string>
     <key>CFBundleVersion</key>
-    <string>12</string>
+    <string>22</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>
@@ -27,17 +29,17 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSystemAdministrationUsageDescription</key>
-    <string>余净需要读取完整磁盘的文件元数据，才能说明空间占用并避免逐目录请求权限。所有分析都在本机完成。</string>
+    <string>Candor 需要读取完整磁盘的文件元数据，才能说明空间占用并避免逐目录请求权限。所有分析都在本机完成。</string>
     <key>NSDesktopFolderUsageDescription</key>
-    <string>余净需要统计桌面文件的大小和位置，不读取文件正文。</string>
+    <string>Candor 需要统计桌面文件的大小和位置，不读取文件正文。</string>
     <key>NSDocumentsFolderUsageDescription</key>
-    <string>余净需要统计文稿目录的大小和位置，不读取文件正文。</string>
+    <string>Candor 需要统计文稿目录的大小和位置，不读取文件正文。</string>
     <key>NSDownloadsFolderUsageDescription</key>
-    <string>余净需要统计下载目录的大小和位置，不读取文件正文。</string>
+    <string>Candor 需要统计下载目录的大小和位置，不读取文件正文。</string>
     <key>NSAppDataUsageDescription</key>
-    <string>余净需要统计应用数据的大小和来源，以区分缓存与用户数据。</string>
+    <string>Candor 需要统计应用数据的大小和来源，以区分缓存与用户数据。</string>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026 YuJing</string>
+    <string>Copyright © 2026 Candor</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

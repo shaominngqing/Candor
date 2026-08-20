@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct MainView: View {
@@ -5,6 +6,7 @@ struct MainView: View {
     @State private var showingCleanupBasket = false
 
     var body: some View {
+        let stagedCount = state.stagedSelectionCount
         NavigationSplitView {
             sidebar
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 260)
@@ -19,10 +21,10 @@ struct MainView: View {
                     showingCleanupBasket = true
                 } label: {
                     Label(
-                        state.stagedCleanupItems.isEmpty
+                        stagedCount == 0
                             ? "待清理篮"
-                            : "待清理 \(state.stagedCleanupItems.count) 项",
-                        systemImage: state.stagedCleanupItems.isEmpty ? "basket" : "basket.fill"
+                            : "待清理 \(stagedCount) 项",
+                        systemImage: stagedCount == 0 ? "basket" : "basket.fill"
                     )
                 }
                 .help("统一核对已勾选项目")
@@ -73,24 +75,11 @@ struct MainView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [.mint, .teal],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 21, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 42, height: 42)
+                CandorAppIcon(size: 44)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("余净").font(.title3.weight(.semibold))
-                    Text("看得懂，才清得安心")
+                    Text("Candor").font(.title3.weight(.semibold))
+                    Text("磁盘分析与清理")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -109,16 +98,16 @@ struct MainView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Label(
-                    state.isLimitedAccess ? "当前为有限扫描" : "完整访问已就绪",
+                    state.isLimitedAccess ? "当前为有限扫描" : "磁盘访问已就绪",
                     systemImage: state.isLimitedAccess ? "exclamationmark.shield.fill" : "checkmark.shield.fill"
                 )
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(state.isLimitedAccess ? .orange : .green)
-                Text(state.isLimitedAccess ? "部分目录会显示为尚未说明" : "扫描时不再逐目录询问权限")
+                Text(state.isLimitedAccess ? "部分目录会显示为未归类" : "扫描时不再逐目录询问权限")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 if state.isLimitedAccess {
-                    Button("补充完整访问") { state.showAccessSetup() }
+                    Button("开启完全访问") { state.showAccessSetup() }
                         .buttonStyle(.link)
                         .font(.caption)
                 }

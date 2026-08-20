@@ -1,8 +1,13 @@
+import AppKit
 import SwiftUI
 
 @main
 struct YuJingApp: App {
     @StateObject private var state = AppState()
+
+    init() {
+        NSApplication.shared.applicationIconImage = CandorIcon.image
+    }
 
     var body: some Scene {
         WindowGroup {

@@ -76,4 +76,28 @@ final class DeletionSafetyTests: XCTestCase {
         XCTAssertThrowsError(try DeletionService.validate(gradleCacheRoot))
         XCTAssertNoThrow(try DeletionService.validate(gradleCacheRoot.appendingPathComponent("8.12")))
     }
+
+    func testAndroidSDKUsesWholeComponentsAsRemovalUnits() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let ndkRoot = home.appendingPathComponent("Library/Android/sdk/ndk", isDirectory: true)
+        let version = ndkRoot.appendingPathComponent("21.4.7075529", isDirectory: true)
+        let leaf = version.appendingPathComponent(
+            "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/liblog.a"
+        )
+
+        XCTAssertNil(DeletionService.managedRemovalUnit(containing: ndkRoot))
+        XCTAssertEqual(
+            DeletionService.managedRemovalUnit(containing: version)?.url,
+            version.standardizedFileURL.resolvingSymlinksInPath()
+        )
+        XCTAssertEqual(
+            DeletionService.managedRemovalUnit(containing: leaf)?.url,
+            version.standardizedFileURL.resolvingSymlinksInPath()
+        )
+        XCTAssertThrowsError(try DeletionService.validate(leaf)) { error in
+            guard case DeletionService.SafetyError.managedUnitRequiresWholeRemoval = error else {
+                return XCTFail("NDK 内部文件必须要求整体处理")
+            }
+        }
+    }
 }

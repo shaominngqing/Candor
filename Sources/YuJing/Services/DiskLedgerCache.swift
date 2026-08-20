@@ -9,8 +9,22 @@ struct CachedStorageLedger: Codable, Sendable {
 
 enum DiskLedgerCache {
     static func load() -> CachedStorageLedger? {
-        guard let data = try? Data(contentsOf: cacheURL) else { return nil }
-        return try? JSONDecoder().decode(CachedStorageLedger.self, from: data)
+        if let record = decode(from: cacheURL) {
+            return record
+        }
+
+        // Preserve an existing scan ledger across the product rename.
+        for legacyURL in legacyCacheURLs {
+            guard let legacyRecord = decode(from: legacyURL) else { continue }
+            save(
+                legacyRecord.scan,
+                accessMode: legacyRecord.accessMode,
+                isComplete: legacyRecord.isComplete,
+                updatedAt: legacyRecord.updatedAt
+            )
+            return legacyRecord
+        }
+        return nil
     }
 
     static func save(
@@ -35,7 +49,22 @@ enum DiskLedgerCache {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
         return base
-            .appendingPathComponent("余净", isDirectory: true)
-            .appendingPathComponent("storage-ledger-v3.json", isDirectory: false)
+            .appendingPathComponent("Candor", isDirectory: true)
+            .appendingPathComponent("storage-ledger-v7.json", isDirectory: false)
+    }
+
+    private static var legacyCacheURLs: [URL] {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
+        return ["清册", "余净"].map { name in
+            base
+                .appendingPathComponent(name, isDirectory: true)
+                .appendingPathComponent("storage-ledger-v3.json", isDirectory: false)
+        }
+    }
+
+    private static func decode(from url: URL) -> CachedStorageLedger? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(CachedStorageLedger.self, from: data)
     }
 }

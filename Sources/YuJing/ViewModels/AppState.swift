@@ -2,6 +2,12 @@ import Foundation
 
 @MainActor
 final class AppState: ObservableObject {
+    private struct SafeCleanupSelectionState {
+        var urls: Set<URL> = []
+        var items: [CleanupItem] = []
+        var bytes: Int64 = 0
+    }
+
     enum CleanupContext: Equatable {
         case application
         case safeCleanup
@@ -23,6 +29,11 @@ final class AppState: ObservableObject {
     @Published var selectedApplicationID: URL?
     @Published var relatedItems: [CleanupItem] = []
     @Published var safeCleanupItems: [CleanupItem] = []
+    @Published private var safeCleanupSelection = SafeCleanupSelectionState()
+    @Published private(set) var cleanupLevel: CleanupLevel? = .recommended
+    @Published private(set) var excludedCleanupPaths: Set<String> = Set(
+        UserDefaults.standard.stringArray(forKey: "CandorExcludedCleanupPaths") ?? []
+    )
     @Published private(set) var storageCategories: [StorageCategory] = []
     @Published private(set) var storageScenes: [StorageScene] = []
     @Published private(set) var ledgerLargeItems: [StorageItem] = []
@@ -39,11 +50,13 @@ final class AppState: ObservableObject {
     @Published private(set) var reusedLedgerSources = 0
     @Published private(set) var rescannedLedgerSources = 0
     @Published private(set) var lastLedgerUpdatedAt: Date?
+    @Published private(set) var hasCompletedStorageAnalysis = false
     @Published private(set) var isScanning = false
     @Published private(set) var isDeepScanning = false
     @Published private(set) var scanPhase = "准备分析"
     @Published private(set) var isScanningSafeCleanup = false
     @Published private(set) var hasScannedSafeCleanup = false
+    @Published private(set) var hasScannedApplications = false
     @Published private(set) var isInspectingApplication = false
     @Published private(set) var isScanningLargeItemFolder = false
     @Published private(set) var isCleaning = false
@@ -58,6 +71,7 @@ final class AppState: ObservableObject {
     private var largeItemChildrenCache: [URL: [StorageItem]] = [:]
     private var selectedLargeItemIndex: [URL: StorageItem] = [:]
     private var cachedLedgerSources: [StorageSourceSnapshot] = []
+    private var ledgerDirectorySizeIndex: [URL: Int64] = [:]
     private var latestLedgerProgress: StorageLedgerProgress?
     private var lastCheckpointAt = Date.distantPast
     private var isLedgerComplete = false
@@ -73,7 +87,9 @@ final class AppState: ObservableObject {
         storage = FileScanner.storageSnapshot()
         guard let cached = DiskLedgerCache.load(), cached.accessMode == fileAccessMode else { return }
         isLedgerComplete = cached.isComplete
+        hasCompletedStorageAnalysis = cached.isComplete
         cachedLedgerSources = cached.scan.sourceSnapshots
+        ledgerDirectorySizeIndex = Self.makeDirectorySizeIndex(from: cached.scan.sourceSnapshots)
         ledgerLargeItems = cached.scan.largeItems
         analyzedBytes = cached.scan.analyzedBytes
         ledgerScannedItemCount = cached.scan.scannedItemCount
@@ -103,6 +119,35 @@ final class AppState: ObservableObject {
 
     var isLimitedAccess: Bool { fileAccessMode == .limited }
 
+    var storageDataState: AnalysisDataState {
+        Self.resolveAnalysisDataState(
+            hasResults: hasCompletedStorageAnalysis,
+            isAnalyzing: isScanning
+        )
+    }
+
+    var cleanupDataState: AnalysisDataState {
+        Self.resolveAnalysisDataState(
+            hasResults: hasScannedSafeCleanup || !safeCleanupItems.isEmpty,
+            isAnalyzing: isScanning || isScanningSafeCleanup
+        )
+    }
+
+    var applicationDataState: AnalysisDataState {
+        Self.resolveAnalysisDataState(
+            hasResults: hasScannedApplications || !applications.isEmpty,
+            isAnalyzing: isScanning
+        )
+    }
+
+    static func resolveAnalysisDataState(
+        hasResults: Bool,
+        isAnalyzing: Bool
+    ) -> AnalysisDataState {
+        if hasResults { return .ready }
+        return isAnalyzing ? .analyzing : .waiting
+    }
+
     func beginInitialScanIfReady() {
         guard fileAccessMode != nil, !isScanning else { return }
         refreshAll()
@@ -112,7 +157,7 @@ final class AppState: ObservableObject {
         fullDiskAccessStatus = FileAccessService.fullDiskAccessStatus()
         isAccessSetupPresented = true
         accessSetupMessage = fileAccessMode == .limited
-            ? "当前使用有限扫描。补充完整磁盘访问后，才能一次覆盖受保护目录。"
+            ? "当前使用有限扫描。补充完全磁盘访问权限后，才能一次覆盖受保护目录。"
             : "开启后只读取文件名、路径、大小和日期，所有分析都在本机完成。"
     }
 
@@ -124,21 +169,23 @@ final class AppState: ObservableObject {
     func openFullDiskAccessSettings() {
         let opened = FileAccessService.openFullDiskAccessSettings()
         accessSetupMessage = opened
-            ? "请点“+”加入余净并打开开关；如果系统要求退出，请重新打开余净，扫描会自动开始。"
-            : "无法打开系统设置，请手动前往“隐私与安全性 → 完整磁盘访问”。"
+            ? "请点“+”加入 Candor 并打开开关；如果系统要求退出，请重新打开 Candor，扫描会自动开始。"
+            : "无法打开系统设置，请手动前往“隐私与安全性 → 完全磁盘访问权限”。"
     }
 
-    func recheckFullDiskAccess() {
+    func recheckFullDiskAccess(silent: Bool = false) {
         fullDiskAccessStatus = FileAccessService.fullDiskAccessStatus()
         guard fullDiskAccessStatus == .granted else {
-            accessSetupMessage = "仍未检测到权限。请确认余净的开关已经开启；若系统要求退出，请重新打开应用。"
+            if !silent {
+                accessSetupMessage = "仍未检测到权限。请确认 Candor 的开关已经开启；若系统要求退出，请重新打开应用。"
+            }
             return
         }
         fileAccessMode = .full
         cachedLedgerSources = []
         UserDefaults.standard.set(ScanAccessMode.full.rawValue, forKey: "scanAccessMode")
         isAccessSetupPresented = false
-        accessSetupMessage = "完整磁盘访问已就绪。"
+        accessSetupMessage = "完全磁盘访问权限已就绪。"
         refreshAll()
     }
 
@@ -147,7 +194,7 @@ final class AppState: ObservableObject {
         cachedLedgerSources = []
         UserDefaults.standard.set(ScanAccessMode.limited.rawValue, forKey: "scanAccessMode")
         isAccessSetupPresented = false
-        accessSetupMessage = "有限扫描不会访问受保护目录，这部分容量会显示为尚未说明。"
+        accessSetupMessage = "有限扫描不会访问受保护目录，这部分容量会显示为未归类。"
         refreshAll()
     }
 
@@ -156,12 +203,25 @@ final class AppState: ObservableObject {
         return applications.first { $0.id == selectedApplicationID }
     }
 
-    var safeCleanupTotal: Int64 { safeCleanupItems.reduce(0) { $0 + $1.size } }
+    var safeCleanupTotal: Int64 {
+        safeCleanupItems.filter { !isCleanupItemExcluded($0) }.reduce(0) { $0 + $1.size }
+    }
     var safeCandidateBytes: Int64 {
-        safeCleanupItems.filter { $0.safety == .safe }.reduce(0) { $0 + $1.size }
+        cleanupBytes(for: .recommended)
     }
     var reviewCandidateBytes: Int64 {
-        safeCleanupItems.filter { $0.safety != .safe }.reduce(0) { $0 + $1.size }
+        safeCleanupItems.filter {
+            !isCleanupItemExcluded($0)
+                && ($0.recommendedLevel == nil || $0.recommendedLevel! > .recommended)
+        }
+            .reduce(0) { $0 + $1.size }
+    }
+    var selectedSafeCleanupBytes: Int64 {
+        safeCleanupSelection.bytes
+    }
+
+    var selectedSafeCleanupItems: [CleanupItem] {
+        safeCleanupSelection.items
     }
     var unexplainedBytes: Int64 {
         storageCategories.first { $0.kind == .unexplained }?.size ?? storage.used
@@ -215,29 +275,59 @@ final class AppState: ObservableObject {
     }
 
     var stagedCleanupItems: [CleanupItem] {
-        var candidates = safeCleanupItems.filter(\.isSelected) + relatedItems.filter(\.isSelected)
+        var candidates = selectedSafeCleanupItems + relatedItems.filter(\.isSelected)
         candidates += selectedLargeItems.compactMap(\.cleanupItem)
+        return Self.compactCleanupItems(candidates)
+    }
 
+    var stagedSelectionCount: Int {
+        var urls = safeCleanupSelection.urls
+        urls.formUnion(
+            relatedItems.lazy
+                .filter(\.isSelected)
+                .map { $0.url.standardizedFileURL }
+        )
+        urls.formUnion(selectedLargeItemURLs.map(\.standardizedFileURL))
+        return urls.count
+    }
+
+    static func compactCleanupItems(_ candidates: [CleanupItem]) -> [CleanupItem] {
         let ordered = candidates.sorted {
             if $0.url.pathComponents.count != $1.url.pathComponents.count {
                 return $0.url.pathComponents.count < $1.url.pathComponents.count
             }
             return $0.size > $1.size
         }
+        var includedPaths = Set<String>()
         var compacted: [CleanupItem] = []
+        compacted.reserveCapacity(ordered.count)
+
         for item in ordered {
-            let path = item.url.standardizedFileURL.path
-            guard !compacted.contains(where: {
-                let existingPath = $0.url.standardizedFileURL.path
-                return existingPath == path || path.hasPrefix(existingPath + "/")
-            }) else { continue }
+            let url = item.url.standardizedFileURL
+            let path = url.path
+            guard !includedPaths.contains(path) else { continue }
+
+            var parent = url.deletingLastPathComponent()
+            var previousPath = path
+            var isCoveredByParent = false
+            while parent.path != previousPath {
+                if includedPaths.contains(parent.path) {
+                    isCoveredByParent = true
+                    break
+                }
+                previousPath = parent.path
+                parent.deleteLastPathComponent()
+            }
+            guard !isCoveredByParent else { continue }
+
+            includedPaths.insert(path)
             compacted.append(item)
         }
-        return compacted.sorted { $0.size > $1.size }
-    }
 
-    var stagedCleanupBytes: Int64 {
-        stagedCleanupItems.reduce(0) { $0 + $1.size }
+        return compacted.sorted {
+            if $0.size != $1.size { return $0.size > $1.size }
+            return $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+        }
     }
 
     func refreshAll(forceDeep: Bool = false) {
@@ -330,6 +420,7 @@ final class AppState: ObservableObject {
     private func receiveApplications(_ scannedApplications: [InstalledApplication], scanID: UUID) {
         guard refreshScanID == scanID else { return }
         applications = mergingInspectedApplication(into: scannedApplications)
+        hasScannedApplications = true
     }
 
     private func receiveRefreshPhase(_ phase: String, scanID: UUID) {
@@ -368,7 +459,7 @@ final class AppState: ObservableObject {
         } else {
             scanPhase = "核对 \(sourceName) · 更新 \(progress.rescannedSourceCount)，复用 \(progress.reusedSourceCount)"
         }
-        if Date().timeIntervalSince(lastCheckpointAt) >= 1 {
+        if Date().timeIntervalSince(lastCheckpointAt) >= 10 {
             lastCheckpointAt = Date()
             saveCheckpoint(progress)
         }
@@ -396,7 +487,9 @@ final class AppState: ObservableObject {
             sourceCounts: ledger.sceneSourceCounts
         )
         cachedLedgerSources = ledger.sourceSnapshots
+        ledgerDirectorySizeIndex = Self.makeDirectorySizeIndex(from: ledger.sourceSnapshots)
         isLedgerComplete = true
+        hasCompletedStorageAnalysis = true
         storageCategories = makeStorageCategories(
             categorySizes: ledger.categorySizes,
             sourceCounts: ledger.categorySourceCounts,
@@ -424,9 +517,7 @@ final class AppState: ObservableObject {
             self.selectedApplicationID = nil
             relatedItems = []
         }
-        if selectedSection == .safeCleanup {
-            loadSafeCleanupIfNeeded(force: true)
-        }
+        loadSafeCleanupIfNeeded(force: true)
     }
 
     private func finishCancelledRefresh(scanID: UUID) {
@@ -475,6 +566,7 @@ final class AppState: ObservableObject {
             let candidates = await worker.value
             guard !Task.isCancelled, self.cleanupScanID == scanID else { return }
             self.safeCleanupItems = candidates
+            self.applyCleanupLevel(.recommended)
             self.hasScannedSafeCleanup = true
             self.isScanningSafeCleanup = false
             self.cleanupWorkerTask = nil
@@ -484,9 +576,108 @@ final class AppState: ObservableObject {
     }
 
     private var ledgerSizeHints: [URL: Int64] {
-        Dictionary(uniqueKeysWithValues: cachedLedgerSources.map {
-            ($0.url.standardizedFileURL, $0.size)
-        })
+        var hints = ledgerDirectorySizeIndex
+        for source in cachedLedgerSources {
+            hints[source.url.standardizedFileURL] = source.size
+        }
+        return hints
+    }
+
+    func applyCleanupLevel(_ level: CleanupLevel) {
+        cleanupLevel = level
+        updateSafeCleanupSelection(
+            safeCleanupItems.filter { self.shouldSelect($0, at: level) }
+        )
+    }
+
+    func clearSafeCleanupSelection() {
+        cleanupLevel = nil
+        updateSafeCleanupSelection([])
+    }
+
+    func setSafeCleanupItem(_ item: CleanupItem, selected: Bool) {
+        guard safeCleanupItems.contains(where: { $0.id == item.id }),
+              !isCleanupItemExcluded(item) else { return }
+        let url = item.url.standardizedFileURL
+        var urls = safeCleanupSelection.urls
+        if selected {
+            urls.insert(url)
+        } else {
+            urls.remove(url)
+        }
+        updateSafeCleanupSelection(urls: urls)
+        cleanupLevel = nil
+    }
+
+    func isSafeCleanupItemSelected(_ item: CleanupItem) -> Bool {
+        safeCleanupSelection.urls.contains(item.url.standardizedFileURL)
+    }
+
+    func isCleanupItemExcluded(_ item: CleanupItem) -> Bool {
+        excludedCleanupPaths.contains(item.url.standardizedFileURL.path)
+    }
+
+    func toggleCleanupExclusion(_ item: CleanupItem) {
+        let path = item.url.standardizedFileURL.path
+        if excludedCleanupPaths.contains(path) {
+            excludedCleanupPaths.remove(path)
+        } else {
+            excludedCleanupPaths.insert(path)
+        }
+        persistCleanupExclusions()
+        cleanupLevel = nil
+        var urls = safeCleanupSelection.urls
+        urls.remove(item.url.standardizedFileURL)
+        updateSafeCleanupSelection(urls: urls)
+        rebuildStorageCategoriesFromCurrentLedger()
+    }
+
+    func resetCleanupExclusions() {
+        excludedCleanupPaths.removeAll()
+        persistCleanupExclusions()
+        applyCleanupLevel(cleanupLevel ?? .recommended)
+        rebuildStorageCategoriesFromCurrentLedger()
+    }
+
+    func cleanupBytes(for level: CleanupLevel) -> Int64 {
+        safeCleanupItems.filter { shouldSelect($0, at: level) }.reduce(0) { $0 + $1.size }
+    }
+
+    private func shouldSelect(_ item: CleanupItem, at level: CleanupLevel) -> Bool {
+        !isCleanupItemExcluded(item) && item.isIncluded(in: level)
+    }
+
+    private func updateSafeCleanupSelection(_ items: [CleanupItem]) {
+        safeCleanupSelection = SafeCleanupSelectionState(
+            urls: Set(items.map { $0.url.standardizedFileURL }),
+            items: items,
+            bytes: items.reduce(0) { $0 + $1.size }
+        )
+    }
+
+    private func updateSafeCleanupSelection(urls: Set<URL>) {
+        updateSafeCleanupSelection(
+            safeCleanupItems.filter { urls.contains($0.url.standardizedFileURL) }
+        )
+    }
+
+    private func persistCleanupExclusions() {
+        UserDefaults.standard.set(Array(excludedCleanupPaths).sorted(), forKey: "CandorExcludedCleanupPaths")
+    }
+
+    private static func makeDirectorySizeIndex(
+        from sources: [StorageSourceSnapshot]
+    ) -> [URL: Int64] {
+        var index: [URL: Int64] = [:]
+        for source in sources {
+            if source.isDirectory {
+                index[source.url.standardizedFileURL] = source.size
+            }
+            for directory in source.directoryIndex {
+                index[directory.url.standardizedFileURL] = directory.size
+            }
+        }
+        return index
     }
 
     private func saveCheckpoint(_ progress: StorageLedgerProgress) {
@@ -580,8 +771,13 @@ final class AppState: ObservableObject {
         largeItemWorkerTask?.cancel()
         isScanningLargeItemFolder = true
         let accessMode = fileAccessMode ?? .limited
+        let directorySizeHints = ledgerDirectorySizeIndex
         let worker = Task.detached(priority: .userInitiated) {
-            try DiskLedgerScanner.scanChildren(of: item, accessMode: accessMode)
+            try DiskLedgerScanner.scanChildren(
+                of: item,
+                accessMode: accessMode,
+                directorySizeHints: directorySizeHints
+            )
         }
         largeItemWorkerTask = worker
         Task { [weak self] in
@@ -636,7 +832,8 @@ final class AppState: ObservableObject {
     }
 
     func selectAllCurrentLargeItems() {
-        for item in currentLargeItems where item.canClean {
+        for item in currentLargeItems
+            where item.action == .selectable && item.risk < .sensitive {
             setLargeItem(item, selected: true)
         }
     }
@@ -706,8 +903,13 @@ final class AppState: ObservableObject {
     }
 
     func clearStagedSelection() {
-        for index in safeCleanupItems.indices { safeCleanupItems[index].isSelected = false }
-        for index in relatedItems.indices { relatedItems[index].isSelected = false }
+        updateSafeCleanupSelection([])
+        relatedItems = relatedItems.map { item in
+            var updated = item
+            updated.isSelected = false
+            return updated
+        }
+        cleanupLevel = nil
         selectedLargeItemURLs = []
         selectedLargeItemIndex = [:]
     }
@@ -720,7 +922,7 @@ final class AppState: ObservableObject {
         let selected: [CleanupItem]
         switch context {
         case .application: selected = relatedItems.filter(\.isSelected)
-        case .safeCleanup: selected = safeCleanupItems.filter(\.isSelected)
+        case .safeCleanup: selected = selectedSafeCleanupItems
         case .largeItems: selected = selectedLargeItems.compactMap(\.cleanupItem)
         }
         clean(items: selected, context: context)
@@ -742,11 +944,11 @@ final class AppState: ObservableObject {
             storage = FileScanner.storageSnapshot()
 
             let failedURLs = Set(report.failures.map { $0.url.standardizedFileURL })
-            for index in safeCleanupItems.indices {
-                safeCleanupItems[index].isSelected = failedURLs.contains(safeCleanupItems[index].url.standardizedFileURL)
-            }
-            for index in relatedItems.indices {
-                relatedItems[index].isSelected = failedURLs.contains(relatedItems[index].url.standardizedFileURL)
+            updateSafeCleanupSelection(urls: failedURLs)
+            relatedItems = relatedItems.map { item in
+                var updated = item
+                updated.isSelected = failedURLs.contains(item.url.standardizedFileURL)
+                return updated
             }
             selectedLargeItemURLs = Set(selectedLargeItemURLs.filter { failedURLs.contains($0.standardizedFileURL) })
             selectedLargeItemIndex = selectedLargeItemIndex.filter { failedURLs.contains($0.key.standardizedFileURL) }
@@ -782,8 +984,26 @@ final class AppState: ObservableObject {
 
             largeItemChildrenCache.removeAll()
             largeItemPath = []
+            let movedURLs = items.map(\.url).filter {
+                !failedURLs.contains($0.standardizedFileURL)
+            }
+            invalidateLedgerSources(containing: movedURLs)
             refreshAll()
         }
+    }
+
+    private func invalidateLedgerSources(containing changedURLs: [URL]) {
+        guard !changedURLs.isEmpty else { return }
+        let changedPaths = changedURLs.map { $0.standardizedFileURL.path }
+        cachedLedgerSources.removeAll { source in
+            let sourcePath = source.url.standardizedFileURL.path
+            return changedPaths.contains { changedPath in
+                changedPath == sourcePath
+                    || changedPath.hasPrefix(sourcePath + "/")
+                    || sourcePath.hasPrefix(changedPath + "/")
+            }
+        }
+        ledgerDirectorySizeIndex = Self.makeDirectorySizeIndex(from: cachedLedgerSources)
     }
 
     private func makeStorageCategories(
@@ -797,10 +1017,15 @@ final class AppState: ObservableObject {
         let measuredBytes = sizes.values.reduce(0, +)
         sizes[.unexplained] = max(storage.used - measuredBytes, 0)
 
-        var candidateSizes: [StorageCategoryKind: Int64] = [:]
+        var recommendedSizes: [StorageCategoryKind: Int64] = [:]
+        var reviewSizes: [StorageCategoryKind: Int64] = [:]
         for item in candidates {
             let kind = DiskLedgerScanner.category(for: item.url)
-            candidateSizes[kind, default: 0] += item.size
+            if shouldSelect(item, at: .recommended) {
+                recommendedSizes[kind, default: 0] += item.size
+            } else if !isCleanupItemExcluded(item) {
+                reviewSizes[kind, default: 0] += item.size
+            }
         }
 
         return StorageCategoryKind.allCases
@@ -808,7 +1033,8 @@ final class AppState: ObservableObject {
                 StorageCategory(
                     kind: kind,
                     size: sizes[kind, default: 0],
-                    cleanupCandidateSize: candidateSizes[kind, default: 0],
+                    recommendedCleanupSize: recommendedSizes[kind, default: 0],
+                    reviewCleanupSize: reviewSizes[kind, default: 0],
                     sourceCount: sourceCounts[kind, default: 0],
                     isComplete: kind == .unexplained ? isComplete : isComplete
                 )
@@ -839,6 +1065,7 @@ final class AppState: ObservableObject {
                 return $0.kind.title.localizedStandardCompare($1.kind.title) == .orderedAscending
             }
     }
+
 }
 
 private final class LedgerProgressRelay: @unchecked Sendable {

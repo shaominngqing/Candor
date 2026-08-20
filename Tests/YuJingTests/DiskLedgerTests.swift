@@ -2,6 +2,23 @@ import XCTest
 @testable import YuJing
 
 final class DiskLedgerTests: XCTestCase {
+    @MainActor
+    func testAnalysisDataStateDoesNotPresentMissingResultsAsZero() {
+        XCTAssertEqual(
+            AppState.resolveAnalysisDataState(hasResults: false, isAnalyzing: false),
+            .waiting
+        )
+        XCTAssertEqual(
+            AppState.resolveAnalysisDataState(hasResults: false, isAnalyzing: true),
+            .analyzing
+        )
+        XCTAssertEqual(
+            AppState.resolveAnalysisDataState(hasResults: true, isAnalyzing: true),
+            .ready,
+            "已有结果时应在后台更新期间继续展示，避免界面退回空状态"
+        )
+    }
+
     func testKnownPathsAreAssignedToHumanReadableCategories() {
         let home = FileManager.default.homeDirectoryForCurrentUser
 
@@ -51,6 +68,88 @@ final class DiskLedgerTests: XCTestCase {
         }
     }
 
+    func testRecentOrSmallCacheIsNotRecommendedAutomatically() {
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        XCTAssertFalse(FileScanner.shouldRecommendCache(
+            modifiedAt: now,
+            size: 500 * 1_024 * 1_024,
+            now: now
+        ))
+        XCTAssertFalse(FileScanner.shouldRecommendCache(
+            modifiedAt: Calendar.current.date(byAdding: .day, value: -60, to: now),
+            size: 5 * 1_024 * 1_024,
+            now: now
+        ))
+        XCTAssertTrue(FileScanner.shouldRecommendCache(
+            modifiedAt: Calendar.current.date(byAdding: .day, value: -31, to: now),
+            size: 500 * 1_024 * 1_024,
+            now: now
+        ))
+    }
+
+    func testCleanupLevelsExpandWithoutSelectingSensitiveData() {
+        let lightItem = cleanupItem(risk: .disposable, level: .light)
+        let recommendedItem = cleanupItem(risk: .regenerable, level: .recommended)
+        let deepItem = cleanupItem(risk: .reacquirable, level: .deep)
+        let sensitiveItem = cleanupItem(risk: .sensitive, level: .light)
+
+        XCTAssertTrue(lightItem.isIncluded(in: .light))
+        XCTAssertFalse(recommendedItem.isIncluded(in: .light))
+        XCTAssertTrue(recommendedItem.isIncluded(in: .recommended))
+        XCTAssertFalse(deepItem.isIncluded(in: .recommended))
+        XCTAssertTrue(deepItem.isIncluded(in: .deep))
+        XCTAssertFalse(sensitiveItem.isIncluded(in: .deep))
+    }
+
+    @MainActor
+    func testCleanupLevelChangesSelectionWithoutRewritingScanResults() {
+        let state = AppState()
+        let lowImpact = cleanupItem(risk: .disposable, level: .light)
+        let rebuildable = cleanupItem(risk: .regenerable, level: .deep)
+        state.safeCleanupItems = [lowImpact, rebuildable]
+
+        state.applyCleanupLevel(.light)
+        XCTAssertEqual(Set(state.selectedSafeCleanupItems.map(\.id)), [lowImpact.id])
+
+        state.applyCleanupLevel(.deep)
+        XCTAssertEqual(Set(state.selectedSafeCleanupItems.map(\.id)), [lowImpact.id, rebuildable.id])
+        XCTAssertTrue(state.safeCleanupItems.allSatisfy { !$0.isSelected })
+    }
+
+    @MainActor
+    func testStagedCleanupCompactionDropsChildrenOfSelectedFolder() {
+        let root = URL(fileURLWithPath: "/tmp/CandorCompaction", isDirectory: true)
+        let parent = cleanupItem(url: root, risk: .regenerable, level: .deep)
+        let child = cleanupItem(
+            url: root.appendingPathComponent("nested/cache.bin"),
+            risk: .regenerable,
+            level: .deep
+        )
+
+        let compacted = AppState.compactCleanupItems([child, parent, child])
+
+        XCTAssertEqual(compacted.map(\.id), [parent.id])
+    }
+
+    @MainActor
+    func testStagedCleanupCompactionHandlesThousandsOfSiblingsQuickly() {
+        let root = URL(fileURLWithPath: "/tmp/CandorCompactionSiblings", isDirectory: true)
+        let candidates = (0..<5_000).map { index in
+            cleanupItem(
+                url: root.appendingPathComponent("cache-\(index)", isDirectory: true),
+                risk: .regenerable,
+                level: .deep
+            )
+        }
+        let clock = ContinuousClock()
+        let started = clock.now
+
+        let compacted = AppState.compactCleanupItems(candidates)
+
+        XCTAssertEqual(compacted.count, candidates.count)
+        XCTAssertLessThan(started.duration(to: clock.now), .seconds(1))
+    }
+
     func testFolderDrillDownIncludesHiddenChildrenAndSortsBySize() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("YuJingLedgerTests-\(UUID().uuidString)", isDirectory: true)
@@ -70,16 +169,32 @@ final class DiskLedgerTests: XCTestCase {
             scene: nil,
             isDirectory: true,
             canOpen: true,
-            canClean: false,
+            action: .unavailable,
             modifiedAt: nil,
-            safety: .sensitive,
-            explanation: "测试"
+            risk: .sensitive,
+            explanation: "测试",
+            actionReason: "测试目录"
         )
         let children = try DiskLedgerScanner.scanChildren(of: parent, accessMode: .full)
 
         XCTAssertEqual(Set(children.map(\.name)), Set([".hidden", "small"]))
         XCTAssertEqual(children.first?.name, ".hidden")
         XCTAssertGreaterThan(children.first?.size ?? 0, children.last?.size ?? 0)
+    }
+
+    func testInitialTraversalBuildsReusableDirectorySizeIndex() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CandorDirectoryIndex-\(UUID().uuidString)", isDirectory: true)
+        let nested = root.appendingPathComponent("nested", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data(repeating: 7, count: 2 * 1_024 * 1_024)
+            .write(to: nested.appendingPathComponent("payload.bin"))
+
+        let index = try DiskLedgerScanner.directorySizeIndex(at: root)
+
+        XCTAssertGreaterThanOrEqual(index[nested.standardizedFileURL] ?? 0, 2 * 1_024 * 1_024)
+        XCTAssertGreaterThanOrEqual(index[root.standardizedFileURL] ?? 0, 2 * 1_024 * 1_024)
     }
 
     func testLimitedModeSkipsProtectedRootsWithoutBlockingOrdinaryCaches() {
@@ -198,7 +313,36 @@ final class DiskLedgerTests: XCTestCase {
             isPackage: false,
             modifiedAt: modifiedAt,
             scannedAt: scannedAt,
-            largeItem: nil
+            largeItem: nil,
+            directoryIndex: []
+        )
+    }
+
+    private func cleanupItem(
+        risk: CleanupRiskLevel,
+        level: CleanupLevel?
+    ) -> CleanupItem {
+        let url = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)")
+        return cleanupItem(url: url, risk: risk, level: level)
+    }
+
+    private func cleanupItem(
+        url: URL,
+        risk: CleanupRiskLevel,
+        level: CleanupLevel?
+    ) -> CleanupItem {
+        return CleanupItem(
+            id: url,
+            url: url,
+            displayName: "测试",
+            category: .cache,
+            size: 1,
+            modifiedAt: nil,
+            risk: risk,
+            recommendedLevel: level,
+            explanation: "测试",
+            impact: "测试",
+            isSelected: false
         )
     }
 }

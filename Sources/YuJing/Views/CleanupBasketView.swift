@@ -7,6 +7,9 @@ struct CleanupBasketView: View {
     @State private var showingConfirmation = false
 
     var body: some View {
+        let stagedItems = state.stagedCleanupItems
+        let stagedBytes = stagedItems.reduce(0) { $0 + $1.size }
+        let higherImpactCount = stagedItems.filter { $0.risk >= .reacquirable }.count
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
@@ -23,29 +26,29 @@ struct CleanupBasketView: View {
 
             HStack {
                 Label(
-                    "已暂存 \(state.stagedCleanupItems.count) 项 · \(ByteFormatting.string(state.stagedCleanupBytes))",
+                    "已暂存 \(stagedItems.count) 项 · \(ByteFormatting.string(stagedBytes))",
                     systemImage: "basket.fill"
                 )
                 .font(.headline)
                 Spacer()
                 Button("取消所有选择") { state.clearStagedSelection() }
-                    .disabled(state.stagedCleanupItems.isEmpty)
+                    .disabled(stagedItems.isEmpty)
             }
 
-            if state.stagedCleanupItems.isEmpty {
+            if stagedItems.isEmpty {
                 EmptyStateView(
                     title: "待清理篮是空的",
-                    message: "在应用卸载、安全清理或大项目中勾选内容，它们会统一出现在这里。",
+                    message: "在应用卸载、清理建议或大文件与目录中勾选内容，它们会统一出现在这里。",
                     systemImage: "basket"
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(state.stagedCleanupItems) { item in
+                        ForEach(stagedItems) { item in
                             HStack(spacing: 12) {
                                 Image(systemName: item.category.systemImage)
-                                    .foregroundStyle(item.safety == .safe ? Color.teal : Color.orange)
+                                    .foregroundStyle(item.risk <= .regenerable ? Color.teal : Color.orange)
                                     .frame(width: 24)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(item.displayName)
@@ -55,11 +58,15 @@ struct CleanupBasketView: View {
                                         .font(.caption2.monospaced())
                                         .foregroundStyle(.tertiary)
                                         .lineLimit(1)
+                                    Text(item.impact)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
                                 }
                                 Spacer()
                                 Text(ByteFormatting.string(item.size))
                                     .font(.callout.monospacedDigit())
-                                SafetyBadge(level: item.safety)
+                                CleanupRiskBadge(level: item.risk)
                                 Button {
                                     QuickLookPreviewer.shared.preview(item.url)
                                 } label: {
@@ -89,18 +96,24 @@ struct CleanupBasketView: View {
             }
 
             HStack {
-                Label("受保护路径会在执行前再次拦截", systemImage: "lock.shield")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if higherImpactCount > 0 {
+                    Label("包含 \(higherImpactCount) 个需要重新获取或可能含数据的项目", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else {
+                    Label("受保护路径会在执行前再次拦截", systemImage: "lock.shield")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button {
                     showingConfirmation = true
                 } label: {
-                    Label("移到废纸篓（\(ByteFormatting.string(state.stagedCleanupBytes))）", systemImage: "trash")
+                    Label("移到废纸篓（\(ByteFormatting.string(stagedBytes))）", systemImage: "trash")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.red)
-                .disabled(state.stagedCleanupItems.isEmpty || state.isCleaning)
+                .disabled(stagedItems.isEmpty || state.isCleaning)
             }
         }
         .padding(24)
@@ -108,14 +121,14 @@ struct CleanupBasketView: View {
         .alert("确认清理待清理篮？", isPresented: $showingConfirmation) {
             Button("取消", role: .cancel) {}
             Button(
-                "移动 \(state.stagedCleanupItems.count) 项（\(ByteFormatting.string(state.stagedCleanupBytes))）",
+                "移动 \(stagedItems.count) 项（\(ByteFormatting.string(stagedBytes))）",
                 role: .destructive
             ) {
                 state.cleanStagedItems()
                 dismiss()
             }
         } message: {
-            Text("这些项目占用 \(ByteFormatting.string(state.stagedCleanupBytes))，会统一移到废纸篓；清空废纸篓后空间才会真正释放。")
+            Text("这些项目占用 \(ByteFormatting.string(stagedBytes))，会统一移到废纸篓；清空废纸篓后空间才会真正释放。")
         }
     }
 }

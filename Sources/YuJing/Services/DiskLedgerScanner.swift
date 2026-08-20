@@ -24,9 +24,17 @@ enum DiskLedgerScanner {
         let isDirectory: Bool
         let isPackage: Bool
         let modifiedAt: Date?
+        let directoryIndex: [StorageDirectorySnapshot]
+    }
+
+    private struct DirectoryFrame {
+        let url: URL
+        let level: Int
+        var size: Int64
     }
 
     private static let largeItemThreshold: Int64 = 100 * 1_024 * 1_024
+    private static let directoryIndexThreshold: Int64 = 1 * 1_024 * 1_024
     private static let resourceKeys: Set<URLResourceKey> = [
         .isRegularFileKey,
         .isDirectoryKey,
@@ -92,7 +100,8 @@ enum DiskLedgerScanner {
                     isPackage: measured.isPackage,
                     modifiedAt: measured.modifiedAt,
                     scannedAt: Date(),
-                    largeItem: item
+                    largeItem: item,
+                    directoryIndex: measured.directoryIndex
                 )
                 rescannedSourceCount += 1
             }
@@ -128,7 +137,8 @@ enum DiskLedgerScanner {
 
     static func scanChildren(
         of parent: StorageItem,
-        accessMode: ScanAccessMode
+        accessMode: ScanAccessMode,
+        directorySizeHints: [URL: Int64] = [:]
     ) throws -> [StorageItem] {
         guard parent.canOpen, !FileAccessService.shouldSkip(parent.url, in: accessMode) else { return [] }
         let childURLs = try FileManager.default.contentsOfDirectory(
@@ -147,11 +157,37 @@ enum DiskLedgerScanner {
                 category: category,
                 scene: scene(for: url) ?? parent.scene
             )
-            let measured = try measure(url)
+            let measured: MeasuredSource
+            if let hintedSize = directorySizeHints[url.standardizedFileURL],
+               let values = try? url.resourceValues(forKeys: resourceKeys),
+               values.isDirectory == true {
+                measured = MeasuredSource(
+                    size: hintedSize,
+                    scannedItemCount: 1,
+                    inaccessibleCount: 0,
+                    isDirectory: true,
+                    isPackage: values.isPackage == true,
+                    modifiedAt: values.contentModificationDate,
+                    directoryIndex: []
+                )
+            } else {
+                measured = try measure(url)
+            }
             guard measured.size > 0 || measured.inaccessibleCount > 0 else { continue }
             items.append(storageItem(source: source, measured: measured))
         }
         return items.sorted(by: itemSort)
+    }
+
+    static func directorySizeIndex(at url: URL) throws -> [URL: Int64] {
+        let measured = try measure(url)
+        var index = Dictionary(uniqueKeysWithValues: measured.directoryIndex.map {
+            ($0.url.standardizedFileURL, $0.size)
+        })
+        if measured.isDirectory {
+            index[url.standardizedFileURL] = measured.size
+        }
+        return index
     }
 
     static func category(for url: URL) -> StorageCategoryKind {
@@ -295,7 +331,8 @@ enum DiskLedgerScanner {
                 inaccessibleCount: 1,
                 isDirectory: false,
                 isPackage: false,
-                modifiedAt: nil
+                modifiedAt: nil,
+                directoryIndex: []
             )
         }
 
@@ -309,7 +346,8 @@ enum DiskLedgerScanner {
                 inaccessibleCount: 0,
                 isDirectory: false,
                 isPackage: false,
-                modifiedAt: modifiedAt
+                modifiedAt: modifiedAt,
+                directoryIndex: []
             )
         }
         guard isDirectory else {
@@ -319,7 +357,8 @@ enum DiskLedgerScanner {
                 inaccessibleCount: 0,
                 isDirectory: false,
                 isPackage: false,
-                modifiedAt: modifiedAt
+                modifiedAt: modifiedAt,
+                directoryIndex: []
             )
         }
 
@@ -339,15 +378,35 @@ enum DiskLedgerScanner {
                 inaccessibleCount: 1,
                 isDirectory: true,
                 isPackage: isPackage,
-                modifiedAt: modifiedAt
+                modifiedAt: modifiedAt,
+                directoryIndex: []
             )
         }
 
-        var total: Int64 = 0
+        let normalizedRoot = url.standardizedFileURL
+        var stack = [DirectoryFrame(url: normalizedRoot, level: 0, size: 0)]
+        var directoryIndex: [StorageDirectorySnapshot] = []
         var itemCount = 1
+
+        func closeLastDirectory() {
+            guard stack.count > 1 else { return }
+            let directory = stack.removeLast()
+            if !isPackage, directory.size >= directoryIndexThreshold {
+                directoryIndex.append(StorageDirectorySnapshot(
+                    url: directory.url,
+                    size: directory.size
+                ))
+            }
+            stack[stack.count - 1].size += directory.size
+        }
+
         for case let itemURL as URL in enumerator {
             try checkCancellation()
             itemCount += 1
+            let level = enumerator.level
+            while stack.count > 1, let current = stack.last, current.level >= level {
+                closeLastDirectory()
+            }
             guard let values = try? itemURL.resourceValues(forKeys: resourceKeys) else {
                 inaccessibleCount += 1
                 continue
@@ -356,15 +415,24 @@ enum DiskLedgerScanner {
                 enumerator.skipDescendants()
                 continue
             }
-            if values.isRegularFile == true { total += allocatedSize(values) }
+            let normalizedItem = itemURL.standardizedFileURL
+            if values.isDirectory == true {
+                stack.append(DirectoryFrame(url: normalizedItem, level: level, size: 0))
+            } else if values.isRegularFile == true {
+                stack[stack.count - 1].size += allocatedSize(values)
+            }
         }
+
+        while stack.count > 1 { closeLastDirectory() }
+        let total = stack[0].size
         return MeasuredSource(
             size: total,
             scannedItemCount: itemCount,
             inaccessibleCount: inaccessibleCount,
             isDirectory: true,
             isPackage: isPackage,
-            modifiedAt: modifiedAt
+            modifiedAt: modifiedAt,
+            directoryIndex: directoryIndex
         )
     }
 
@@ -439,12 +507,7 @@ enum DiskLedgerScanner {
     }
 
     private static func storageItem(source: Source, measured: MeasuredSource) -> StorageItem {
-        let canClean: Bool
-        if [.applications, .trash, .systemProtected].contains(source.category) {
-            canClean = false
-        } else {
-            canClean = (try? DeletionService.validate(source.url)) != nil
-        }
+        let availability = cleanupAvailability(for: source, measured: measured)
         return StorageItem(
             url: source.url,
             name: displayName(for: source.url),
@@ -453,11 +516,73 @@ enum DiskLedgerScanner {
             scene: source.scene,
             isDirectory: measured.isDirectory,
             canOpen: measured.isDirectory && !measured.isPackage,
-            canClean: canClean,
+            action: availability.action,
             modifiedAt: measured.modifiedAt,
-            safety: safety(for: source.category),
-            explanation: source.category.explanation
+            risk: risk(for: source.category, scene: source.scene),
+            explanation: source.category.explanation,
+            actionReason: availability.reason
         )
+    }
+
+    private static func cleanupAvailability(
+        for source: Source,
+        measured: MeasuredSource
+    ) -> (action: StorageItemAction, reason: String?) {
+        if let managedUnit = DeletionService.managedRemovalUnit(containing: source.url) {
+            let normalizedURL = source.url.standardizedFileURL.resolvingSymlinksInPath()
+            if normalizedURL == managedUnit.url {
+                return (
+                    .removeAsUnit,
+                    "\(managedUnit.displayName) 是完整组件。可整体移到废纸篓；删除后需要通过 SDK Manager 重新安装，请先退出 Android Studio。"
+                )
+            }
+            return (
+                .partOfManagedUnit,
+                "属于 \(managedUnit.displayName)。零散删除会损坏组件，请返回上层整体处理。"
+            )
+        }
+
+        switch source.category {
+        case .applications:
+            return (.applicationUninstall, "请在“应用卸载”中核对应用本体和关联文件。")
+        case .trash:
+            return (.trash, "内容已经在废纸篓中，请通过 Finder 清空后释放空间。")
+        case .systemProtected:
+            return (.systemProtected, "此位置由 macOS 管理，Candor 不提供删除。")
+        default:
+            break
+        }
+
+        do {
+            try DeletionService.validate(source.url)
+            return (.selectable, nil)
+        } catch let error as DeletionService.SafetyError {
+            switch error {
+            case .protectedRoot:
+                return (.inspectDeeper, "这是范围较大的目录根节点，请进入下一层选择具体内容。")
+            case .managedUnitRequiresWholeRemoval(let name):
+                return (.partOfManagedUnit, "属于 \(name)。零散删除会损坏组件，请返回上层整体处理。")
+            case .pathOutsideAllowedLocations:
+                if source.scene == .aiModels {
+                    return (.manageInApp, "模型由对应应用维护，请在模型应用中按完整模型管理。")
+                }
+                if source.scene == .virtualMachines {
+                    return (.manageInApp, "虚拟机和模拟器可能包含系统与数据，请在对应管理器中删除。")
+                }
+                return (
+                    measured.isDirectory && !measured.isPackage ? .inspectDeeper : .unavailable,
+                    measured.isDirectory && !measured.isPackage
+                        ? "这个目录范围较大，请进入下一层查找可以整体处理的内容。"
+                        : "Candor 尚未建立此类文件的安全处理规则，可在 Finder 中处理。"
+                )
+            case .currentApplication:
+                return (.unavailable, "Candor 运行时不能删除自己。")
+            case .applicationIsRunning(let name):
+                return (.unavailable, "\(name) 正在运行，退出应用后才能处理。")
+            }
+        } catch {
+            return (.unavailable, "当前无法安全处理此项目。")
+        }
     }
 
     private static func category(
@@ -627,11 +752,22 @@ enum DiskLedgerScanner {
         )
     ]
 
-    private static func safety(for category: StorageCategoryKind) -> SafetyLevel {
+    private static func risk(
+        for category: StorageCategoryKind,
+        scene: StorageSceneKind?
+    ) -> CleanupRiskLevel {
         switch category {
-        case .cacheTemporary: .safe
-        case .applications, .trash: .review
-        case .appData, .personalFiles, .systemProtected, .unexplained: .sensitive
+        case .cacheTemporary: .regenerable
+        case .applications, .trash: .reacquirable
+        case .appData:
+            switch scene {
+            case .aiModels, .virtualMachines, .developer, .downloadsInstallers:
+                .reacquirable
+            default:
+                .sensitive
+            }
+        case .personalFiles: .sensitive
+        case .systemProtected, .unexplained: .sensitive
         }
     }
 

@@ -19,11 +19,19 @@ enum FullDiskAccessStatus: Sendable {
 
     var title: String {
         switch self {
-        case .granted: "已获得完整磁盘访问"
-        case .notGranted: "尚未获得完整磁盘访问"
+        case .granted: "已获得完全磁盘访问权限"
+        case .notGranted: "尚未获得完全磁盘访问权限"
         case .unknown: "暂时无法确认授权状态"
         }
     }
+}
+
+enum AnalysisDataState: Equatable, Sendable {
+    case waiting
+    case analyzing
+    case ready
+
+    var isReady: Bool { self == .ready }
 }
 
 enum SidebarSection: String, CaseIterable, Identifiable {
@@ -36,9 +44,9 @@ enum SidebarSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .overview: "空间账本"
-        case .largeItems: "大项目"
-        case .safeCleanup: "安全清理"
+        case .overview: "存储"
+        case .largeItems: "大文件与目录"
+        case .safeCleanup: "清理建议"
         case .applications: "应用卸载"
         }
     }
@@ -99,28 +107,68 @@ enum CleanupCategory: String, CaseIterable, Sendable {
     }
 }
 
-enum SafetyLevel: Int, Comparable, Sendable, Codable {
-    case safe = 0
-    case review = 1
-    case sensitive = 2
+enum CleanupLevel: Int, CaseIterable, Comparable, Identifiable, Sendable, Codable {
+    case light = 0
+    case recommended = 1
+    case deep = 2
 
-    static func < (lhs: SafetyLevel, rhs: SafetyLevel) -> Bool {
+    var id: Int { rawValue }
+
+    static func < (lhs: CleanupLevel, rhs: CleanupLevel) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
 
     var title: String {
         switch self {
-        case .safe: "可再生成"
-        case .review: "请确认"
+        case .light: "低影响"
+        case .recommended: "标准"
+        case .deep: "更多空间"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .light: "只选旧日志和临时状态"
+        case .recommended: "增加长期未使用的应用缓存，首次启动可能稍慢"
+        case .deep: "增加大型可重建缓存和可重新获取资源"
+        }
+    }
+}
+
+enum CleanupRiskLevel: Int, Comparable, Sendable, Codable {
+    case disposable = 0
+    case regenerable = 1
+    case reacquirable = 2
+    case sensitive = 3
+
+    static func < (lhs: CleanupRiskLevel, rhs: CleanupRiskLevel) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .disposable: "可直接清理"
+        case .regenerable: "可再生成"
+        case .reacquirable: "可重新获取"
         case .sensitive: "可能含数据"
         }
     }
 
     var symbol: String {
         switch self {
-        case .safe: "checkmark.circle.fill"
-        case .review: "exclamationmark.circle.fill"
-        case .sensitive: "lock.circle.fill"
+        case .disposable: "checkmark.circle.fill"
+        case .regenerable: "arrow.clockwise.circle.fill"
+        case .reacquirable: "arrow.down.circle.fill"
+        case .sensitive: "exclamationmark.triangle.fill"
+        }
+    }
+
+    var defaultImpact: String {
+        switch self {
+        case .disposable: "删除后通常不会影响应用和个人文件。"
+        case .regenerable: "删除后可重新生成，应用下次启动或处理任务时可能稍慢。"
+        case .reacquirable: "删除后需要重新下载、安装或创建。"
+        case .sensitive: "可能包含设置、数据库或用户创建的内容。"
         }
     }
 }
@@ -132,9 +180,16 @@ struct CleanupItem: Identifiable, Hashable, Sendable {
     let category: CleanupCategory
     let size: Int64
     let modifiedAt: Date?
-    let safety: SafetyLevel
+    let risk: CleanupRiskLevel
+    var recommendedLevel: CleanupLevel?
     let explanation: String
+    let impact: String
     var isSelected: Bool
+
+    func isIncluded(in level: CleanupLevel) -> Bool {
+        guard risk < .sensitive, let recommendedLevel else { return false }
+        return recommendedLevel <= level
+    }
 }
 
 struct StorageSnapshot: Sendable {
@@ -167,7 +222,7 @@ enum StorageCategoryKind: String, CaseIterable, Identifiable, Sendable, Codable 
         case .cacheTemporary: "缓存与临时文件"
         case .trash: "废纸篓"
         case .systemProtected: "macOS 与受保护文件"
-        case .unexplained: "尚未说明"
+        case .unexplained: "未归类"
         }
     }
 
@@ -179,7 +234,7 @@ enum StorageCategoryKind: String, CaseIterable, Identifiable, Sendable, Codable 
         case .cacheTemporary: "缓存、日志和临时副本；只把有明确依据的项目列为清理候选。"
         case .trash: "已经移入废纸篓、但尚未永久释放的空间。"
         case .systemProtected: "macOS、共享资源和不应由清理工具直接修改的内容。"
-        case .unexplained: "尚未完成分析、没有读取权限或 APFS 暂时无法准确归因的空间。"
+        case .unexplained: "分析中、访问受限或 APFS 暂时无法归类的空间。"
         }
     }
 
@@ -267,11 +322,57 @@ struct StorageScene: Identifiable, Hashable, Sendable {
 struct StorageCategory: Identifiable, Hashable, Sendable {
     let kind: StorageCategoryKind
     let size: Int64
-    let cleanupCandidateSize: Int64
+    let recommendedCleanupSize: Int64
+    let reviewCleanupSize: Int64
     let sourceCount: Int
     let isComplete: Bool
 
     var id: StorageCategoryKind { kind }
+    var cleanupCandidateSize: Int64 { recommendedCleanupSize + reviewCleanupSize }
+}
+
+enum StorageItemAction: String, Sendable, Codable {
+    case selectable
+    case removeAsUnit
+    case inspectDeeper
+    case partOfManagedUnit
+    case manageInApp
+    case applicationUninstall
+    case trash
+    case systemProtected
+    case unavailable
+
+    var canSelect: Bool {
+        self == .selectable || self == .removeAsUnit
+    }
+
+    var title: String {
+        switch self {
+        case .selectable: "可选择"
+        case .removeAsUnit: "整体处理"
+        case .inspectDeeper: "进入下一层"
+        case .partOfManagedUnit: "属于上层组件"
+        case .manageInApp: "在对应应用中管理"
+        case .applicationUninstall: "前往应用卸载"
+        case .trash: "已在废纸篓"
+        case .systemProtected: "系统保护"
+        case .unavailable: "暂不支持"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .selectable: "checkmark.circle"
+        case .removeAsUnit: "shippingbox"
+        case .inspectDeeper: "folder"
+        case .partOfManagedUnit: "arrow.uturn.backward.circle"
+        case .manageInApp: "arrow.up.forward.app"
+        case .applicationUninstall: "app.badge"
+        case .trash: "trash"
+        case .systemProtected: "lock.fill"
+        case .unavailable: "minus.circle"
+        }
+    }
 }
 
 struct StorageItem: Identifiable, Hashable, Sendable, Codable {
@@ -282,12 +383,14 @@ struct StorageItem: Identifiable, Hashable, Sendable, Codable {
     let scene: StorageSceneKind?
     let isDirectory: Bool
     let canOpen: Bool
-    let canClean: Bool
+    let action: StorageItemAction
     let modifiedAt: Date?
-    let safety: SafetyLevel
+    let risk: CleanupRiskLevel
     let explanation: String
+    let actionReason: String?
 
     var id: URL { url }
+    var canClean: Bool { action.canSelect }
 
     var cleanupItem: CleanupItem? {
         guard canClean else { return nil }
@@ -298,11 +401,18 @@ struct StorageItem: Identifiable, Hashable, Sendable, Codable {
             category: .personalFile,
             size: size,
             modifiedAt: modifiedAt,
-            safety: safety,
+            risk: risk,
+            recommendedLevel: nil,
             explanation: explanation,
+            impact: risk.defaultImpact,
             isSelected: true
         )
     }
+}
+
+struct StorageDirectorySnapshot: Hashable, Sendable, Codable {
+    let url: URL
+    let size: Int64
 }
 
 struct StorageSourceSnapshot: Hashable, Sendable, Codable {
@@ -317,6 +427,7 @@ struct StorageSourceSnapshot: Hashable, Sendable, Codable {
     let modifiedAt: Date?
     let scannedAt: Date
     let largeItem: StorageItem?
+    let directoryIndex: [StorageDirectorySnapshot]
 }
 
 struct StorageLedgerScan: Sendable, Codable {

@@ -4,81 +4,92 @@ enum FileScanner {
     private struct SearchLocation {
         let relativePath: String
         let category: CleanupCategory
-        let safety: SafetyLevel
+        let risk: CleanupRiskLevel
         let explanation: String
-        let selectedByDefault: Bool
+        let impact: String
+        let recommendedLevel: CleanupLevel?
     }
 
     private static let relatedLocations: [SearchLocation] = [
         .init(
             relativePath: "Library/Caches",
             category: .cache,
-            safety: .safe,
+            risk: .regenerable,
             explanation: "应用运行时生成的临时文件，重新打开应用后可再生成。",
-            selectedByDefault: true
+            impact: "应用下次启动时可能重新生成缓存，首次打开可能稍慢。",
+            recommendedLevel: .recommended
         ),
         .init(
             relativePath: "Library/Logs",
             category: .log,
-            safety: .safe,
+            risk: .disposable,
             explanation: "应用的诊断日志，通常不包含工作文件。",
-            selectedByDefault: true
+            impact: "不影响应用设置和个人文件。",
+            recommendedLevel: .light
         ),
         .init(
             relativePath: "Library/Saved Application State",
             category: .savedState,
-            safety: .safe,
+            risk: .disposable,
             explanation: "窗口位置和上次退出状态，可由系统重新生成。",
-            selectedByDefault: true
+            impact: "应用下次启动时可能不会恢复之前的窗口位置。",
+            recommendedLevel: .light
         ),
         .init(
             relativePath: "Library/HTTPStorages",
             category: .webData,
-            safety: .safe,
+            risk: .regenerable,
             explanation: "应用的网络请求缓存，可重新下载。",
-            selectedByDefault: true
+            impact: "应用可能重新下载网络内容。",
+            recommendedLevel: .recommended
         ),
         .init(
             relativePath: "Library/WebKit",
             category: .webData,
-            safety: .review,
+            risk: .sensitive,
             explanation: "内嵌网页数据，可能包含登录状态。",
-            selectedByDefault: false
+            impact: "可能需要重新登录，部分离线网页数据会消失。",
+            recommendedLevel: nil
         ),
         .init(
             relativePath: "Library/Preferences",
             category: .preferences,
-            safety: .review,
+            risk: .sensitive,
             explanation: "应用设置；删除后会恢复默认配置。",
-            selectedByDefault: false
+            impact: "应用设置会恢复默认，可能需要重新配置。",
+            recommendedLevel: nil
         ),
         .init(
             relativePath: "Library/Application Support",
             category: .support,
-            safety: .sensitive,
+            risk: .sensitive,
             explanation: "可能包含插件、下载内容或本地数据库，请确认不再需要。",
-            selectedByDefault: false
+            impact: "可能删除账号状态、数据库、插件或用户下载的内容。",
+            recommendedLevel: nil
         ),
         .init(
             relativePath: "Library/Containers",
             category: .container,
-            safety: .sensitive,
+            risk: .sensitive,
             explanation: "沙盒应用的完整数据容器，可能含用户创建的内容。",
-            selectedByDefault: false
+            impact: "可能清除应用的全部本地数据和设置。",
+            recommendedLevel: nil
         ),
         .init(
             relativePath: "Library/Group Containers",
             category: .container,
-            safety: .sensitive,
+            risk: .sensitive,
             explanation: "可能被同一开发者的多个应用共享，默认不选择。",
-            selectedByDefault: false
+            impact: "可能同时影响同一开发者的多个应用。",
+            recommendedLevel: nil
         ),
         .init(
             relativePath: "Library/LaunchAgents",
             category: .launchItem,
-            safety: .review,
+            risk: .sensitive,
             explanation: "应用的用户级后台启动项。",
-            selectedByDefault: false
+            impact: "相关后台服务将不再自动启动。",
+            recommendedLevel: nil
         )
     ]
 
@@ -86,23 +97,26 @@ enum FileScanner {
         .init(
             relativePath: "Library/Caches",
             category: .cache,
-            safety: .safe,
+            risk: .regenerable,
             explanation: "未匹配到现有应用的缓存候选；请按路径再次确认。",
-            selectedByDefault: false
+            impact: "若对应应用仍在使用其他名称识别，可能需要重新生成缓存。",
+            recommendedLevel: .deep
         ),
         .init(
             relativePath: "Library/HTTPStorages",
             category: .webData,
-            safety: .safe,
+            risk: .regenerable,
             explanation: "未匹配到现有应用的网络缓存候选。",
-            selectedByDefault: false
+            impact: "若仍有应用使用它，相关网络内容需要重新下载。",
+            recommendedLevel: .deep
         ),
         .init(
             relativePath: "Library/Saved Application State",
             category: .savedState,
-            safety: .safe,
+            risk: .disposable,
             explanation: "未匹配到现有应用的窗口状态候选。",
-            selectedByDefault: false
+            impact: "若仍有应用使用它，窗口状态会被重置。",
+            recommendedLevel: .deep
         )
     ]
 
@@ -189,10 +203,12 @@ enum FileScanner {
                 category: .application,
                 size: application.size,
                 modifiedAt: application.modifiedAt,
-                safety: .review,
+                risk: .reacquirable,
+                recommendedLevel: .recommended,
                 explanation: applicationCanBeRemoved
                     ? "应用程序本体。若开发者提供专用卸载器，应优先使用它。"
-                    : "此应用不在余净允许清理的位置，只分析关联文件，不会删除应用本体。",
+                    : "此应用不在 Candor 允许清理的位置，只分析关联文件，不会删除应用本体。",
+                impact: "应用将从 Mac 移除，需要重新安装才能再次使用。",
                 isSelected: applicationCanBeRemoved
             )
         ]
@@ -226,10 +242,12 @@ enum FileScanner {
             .filter { !$0.lastPathComponent.lowercased().hasPrefix("com.apple.") }
             .map { url in
                 var item = cleanupItem(url: url, location: location, sizeHints: sizeHints)
-                let olderThanThirtyDays = item.modifiedAt.map {
-                    $0 < Calendar.current.date(byAdding: .day, value: -30, to: Date())!
-                } ?? false
-                item.isSelected = olderThanThirtyDays && item.size >= 10 * 1_024 * 1_024
+                let shouldRecommend = shouldRecommendCache(
+                    modifiedAt: item.modifiedAt,
+                    size: item.size
+                )
+                item.recommendedLevel = shouldRecommend ? .recommended : nil
+                item.isSelected = shouldRecommend
                 return item
             }
             .sorted { $0.size > $1.size }
@@ -285,6 +303,19 @@ enum FileScanner {
         return StorageSnapshot(total: totalNumber.int64Value, available: freeNumber.int64Value)
     }
 
+    static func shouldRecommendCache(
+        modifiedAt: Date?,
+        size: Int64,
+        now: Date = Date()
+    ) -> Bool {
+        guard let modifiedAt,
+              size >= 10 * 1_024 * 1_024,
+              let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: now) else {
+            return false
+        }
+        return modifiedAt < cutoff
+    }
+
     private static func locationURL(relativePath: String) -> URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(relativePath, isDirectory: true)
     }
@@ -313,9 +344,11 @@ enum FileScanner {
             category: location.category,
             size: sizeHints[url.standardizedFileURL] ?? FileSizeCalculator.allocatedSize(of: url),
             modifiedAt: modifiedAt,
-            safety: location.safety,
+            risk: location.risk,
+            recommendedLevel: location.recommendedLevel,
             explanation: location.explanation,
-            isSelected: location.selectedByDefault
+            impact: location.impact,
+            isSelected: location.recommendedLevel.map { $0 <= .recommended } ?? false
         )
     }
 
@@ -327,9 +360,10 @@ enum FileScanner {
                 .init(
                     relativePath: ".cache",
                     category: .cache,
-                    safety: .safe,
+                    risk: .regenerable,
                     explanation: "开发工具和命令行程序生成的缓存；删除后可能需要重新下载依赖。",
-                    selectedByDefault: false
+                    impact: "相关工具下次运行时可能重新下载依赖或重建索引。",
+                    recommendedLevel: .deep
                 )
             ),
             (
@@ -337,9 +371,10 @@ enum FileScanner {
                 .init(
                     relativePath: ".gradle/caches",
                     category: .cache,
-                    safety: .review,
+                    risk: .regenerable,
                     explanation: "Gradle 构建缓存，可以重新生成，但下次构建会更慢并可能重新下载依赖。",
-                    selectedByDefault: false
+                    impact: "下次构建会变慢，并可能重新下载依赖。",
+                    recommendedLevel: .deep
                 )
             ),
             (
@@ -347,9 +382,10 @@ enum FileScanner {
                 .init(
                     relativePath: "Library/Developer/Xcode/DerivedData",
                     category: .cache,
-                    safety: .review,
+                    risk: .regenerable,
                     explanation: "Xcode 编译产物，可以重新生成；请先退出正在构建的项目。",
-                    selectedByDefault: false
+                    impact: "项目下次编译会重新生成索引和构建产物。",
+                    recommendedLevel: .deep
                 )
             )
         ]
@@ -366,9 +402,10 @@ enum FileScanner {
         let location = SearchLocation(
             relativePath: base.relativePath,
             category: base.category,
-            safety: .safe,
+            risk: .disposable,
             explanation: "超过 30 天的应用诊断日志，通常不包含工作文件；应用需要时会重新生成。",
-            selectedByDefault: true
+            impact: "不会影响应用设置和个人文件。",
+            recommendedLevel: .light
         )
         let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
         return immediateChildren(of: locationURL(relativePath: location.relativePath))
@@ -383,13 +420,14 @@ enum FileScanner {
         let downloads = locationURL(relativePath: "Downloads")
         guard !FileAccessService.shouldSkip(downloads, in: accessMode) else { return [] }
         let extensions = Set(["dmg", "pkg", "iso"])
-        let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+        let cutoff = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date()
         let location = SearchLocation(
             relativePath: "Downloads",
             category: .personalFile,
-            safety: .review,
-            explanation: "下载超过 30 天的安装文件。确认对应应用已经安装且不再需要离线安装后再处理。",
-            selectedByDefault: false
+            risk: .reacquirable,
+            explanation: "下载超过 90 天的安装文件。确认对应应用已经安装且不再需要离线安装后再处理。",
+            impact: "需要再次下载安装文件才能离线重装。",
+            recommendedLevel: .deep
         )
         return immediateChildren(of: downloads)
             .filter { extensions.contains($0.pathExtension.lowercased()) }
@@ -404,9 +442,10 @@ enum FileScanner {
         let location = SearchLocation(
             relativePath: ".codex/.tmp/bundled-marketplaces",
             category: .cache,
-            safety: .review,
+            risk: .regenerable,
             explanation: "Codex 遗留的市场暂存副本。仅列出超过 24 小时的 staging 目录；移动前请先退出 Codex。",
-            selectedByDefault: false
+            impact: "Codex 需要时会重新生成或下载市场数据。",
+            recommendedLevel: .deep
         )
 
         return immediateChildren(of: root)
