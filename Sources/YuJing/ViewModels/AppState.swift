@@ -308,16 +308,16 @@ final class AppState: ObservableObject {
             let path = url.path
             guard !includedPaths.contains(path) else { continue }
 
-            var parent = url.deletingLastPathComponent()
-            var previousPath = path
+            var parentPath = (path as NSString).deletingLastPathComponent
             var isCoveredByParent = false
-            while parent.path != previousPath {
-                if includedPaths.contains(parent.path) {
+            while !parentPath.isEmpty && parentPath != "/" {
+                if includedPaths.contains(parentPath) {
                     isCoveredByParent = true
                     break
                 }
-                previousPath = parent.path
-                parent.deleteLastPathComponent()
+                let nextParentPath = (parentPath as NSString).deletingLastPathComponent
+                guard nextParentPath != parentPath else { break }
+                parentPath = nextParentPath
             }
             guard !isCoveredByParent else { continue }
 
