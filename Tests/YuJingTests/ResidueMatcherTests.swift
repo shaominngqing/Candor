@@ -94,7 +94,9 @@ final class DeletionSafetyTests: XCTestCase {
             DeletionService.managedRemovalUnit(containing: leaf)?.url,
             version.standardizedFileURL.resolvingSymlinksInPath()
         )
-        XCTAssertThrowsError(try DeletionService.validate(leaf)) { error in
+        XCTAssertThrowsError(
+            try DeletionService.validate(leaf, checkRunningApplications: false)
+        ) { error in
             guard case DeletionService.SafetyError.managedUnitRequiresWholeRemoval = error else {
                 return XCTFail("NDK 内部文件必须要求整体处理")
             }

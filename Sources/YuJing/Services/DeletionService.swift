@@ -84,7 +84,10 @@ enum DeletionService {
         return DeletionReport(movedCount: movedCount, movedBytes: movedBytes, failures: failures)
     }
 
-    static func validate(_ url: URL) throws {
+    static func validate(
+        _ url: URL,
+        checkRunningApplications: Bool = true
+    ) throws {
         let canonicalURL = url.standardizedFileURL.resolvingSymlinksInPath()
         let canonicalPath = canonicalURL.path
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -117,7 +120,8 @@ enum DeletionService {
             throw SafetyError.currentApplication(url)
         }
 
-        if canonicalURL.pathExtension.lowercased() == "app",
+        if checkRunningApplications,
+           canonicalURL.pathExtension.lowercased() == "app",
            let bundle = Bundle(url: canonicalURL),
            let bundleIdentifier = bundle.bundleIdentifier,
            !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty {
@@ -130,7 +134,7 @@ enum DeletionService {
             guard canonicalURL == managedUnit.url else {
                 throw SafetyError.managedUnitRequiresWholeRemoval(managedUnit.displayName)
             }
-            if isAndroidStudioRunning {
+            if checkRunningApplications && isAndroidStudioRunning {
                 throw SafetyError.applicationIsRunning("Android Studio")
             }
             return
