@@ -1,0 +1,101 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build app bundle
+        run: ./Scripts/build-app.sh
+
+      - name: Verify architecture and signature
+        run: |
+          set -euo pipefail
+          file "dist/Candor.app/Contents/MacOS/YuJing" | grep -q "${{ matrix.arch }}"
+          codesign --verify --deep --strict --verbose=2 "dist/Candor.app"
+
+      - name: Package app
+        id: package
+        run: |
+          set -euo pipefail
+          version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" AppResources/Info.plist)
+          archive="Candor-${version}-macOS-${{ matrix.arch }}.zip"
+          mkdir -p artifacts
+          ditto -c -k --sequesterRsrc --keepParent "dist/Candor.app" "artifacts/${archive}"
+          (
+            cd artifacts
+            shasum -a 256 "${archive}" > "${archive}.sha256"
+          )
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "archive=${archive}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Candor-${{ steps.package.outputs.version }}-macOS-${{ matrix.arch }}
+          path: |
+            artifacts/${{ steps.package.outputs.archive }}
+            artifacts/${{ steps.package.outputs.archive }}.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish prerelease
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged apps
+        uses: actions/download-artifact@v8
+        with:
+          pattern: Candor-*
+          path: release
+          merge-multiple: true
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --prerelease \
+            --generate-notes \
+            --title "Candor ${GITHUB_REF_NAME#v}"
