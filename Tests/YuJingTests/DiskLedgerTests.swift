@@ -103,7 +103,7 @@ final class DiskLedgerTests: XCTestCase {
 
     @MainActor
     func testCleanupLevelChangesSelectionWithoutRewritingScanResults() {
-        let state = AppState()
+        let state = AppState(loadPersistedState: false)
         let lowImpact = cleanupItem(risk: .disposable, level: .light)
         let rebuildable = cleanupItem(risk: .regenerable, level: .deep)
         state.safeCleanupItems = [lowImpact, rebuildable]

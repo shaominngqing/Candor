@@ -37,7 +37,9 @@ jobs:
         run: swift --version
 
       - name: Run tests
-        run: swift test
+        env:
+          NSUnbufferedIO: "YES"
+        run: swift test --verbose
 
       - name: Build app bundle
         run: ./Scripts/build-app.sh

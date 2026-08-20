@@ -76,7 +76,8 @@ final class AppState: ObservableObject {
     private var lastCheckpointAt = Date.distantPast
     private var isLedgerComplete = false
 
-    init() {
+    init(loadPersistedState: Bool = true) {
+        guard loadPersistedState else { return }
         fullDiskAccessStatus = FileAccessService.fullDiskAccessStatus()
         if fullDiskAccessStatus == .granted {
             fileAccessMode = .full
