@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct YuJingApp: App {
+struct CandorApp: App {
     @StateObject private var state = AppState()
 
     init() {

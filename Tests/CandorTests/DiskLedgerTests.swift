@@ -1,5 +1,6 @@
 import XCTest
-@testable import YuJing
+
+@testable import Candor
 
 final class DiskLedgerTests: XCTestCase {
     @MainActor
@@ -56,7 +57,7 @@ final class DiskLedgerTests: XCTestCase {
             ("Downloads/Installer.dmg", .downloadsInstallers),
             ("Pictures/Photos Library.photoslibrary", .photosVideos),
             ("Library/Containers/com.tencent.WeWorkMac/Data", .communication),
-            ("Library/Developer/CoreSimulator/Devices", .virtualMachines)
+            ("Library/Developer/CoreSimulator/Devices", .virtualMachines),
         ]
 
         for (path, expected) in samples {
@@ -70,21 +71,24 @@ final class DiskLedgerTests: XCTestCase {
 
     func testRecentOrSmallCacheIsNotRecommendedAutomatically() {
         let now = Date(timeIntervalSince1970: 10_000_000)
-        XCTAssertFalse(FileScanner.shouldRecommendCache(
-            modifiedAt: now,
-            size: 500 * 1_024 * 1_024,
-            now: now
-        ))
-        XCTAssertFalse(FileScanner.shouldRecommendCache(
-            modifiedAt: Calendar.current.date(byAdding: .day, value: -60, to: now),
-            size: 5 * 1_024 * 1_024,
-            now: now
-        ))
-        XCTAssertTrue(FileScanner.shouldRecommendCache(
-            modifiedAt: Calendar.current.date(byAdding: .day, value: -31, to: now),
-            size: 500 * 1_024 * 1_024,
-            now: now
-        ))
+        XCTAssertFalse(
+            FileScanner.shouldRecommendCache(
+                modifiedAt: now,
+                size: 500 * 1_024 * 1_024,
+                now: now
+            ))
+        XCTAssertFalse(
+            FileScanner.shouldRecommendCache(
+                modifiedAt: Calendar.current.date(byAdding: .day, value: -60, to: now),
+                size: 5 * 1_024 * 1_024,
+                now: now
+            ))
+        XCTAssertTrue(
+            FileScanner.shouldRecommendCache(
+                modifiedAt: Calendar.current.date(byAdding: .day, value: -31, to: now),
+                size: 500 * 1_024 * 1_024,
+                now: now
+            ))
     }
 
     func testCleanupLevelsExpandWithoutSelectingSensitiveData() {
@@ -152,7 +156,7 @@ final class DiskLedgerTests: XCTestCase {
 
     func testFolderDrillDownIncludesHiddenChildrenAndSortsBySize() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("YuJingLedgerTests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("CandorLedgerTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -199,22 +203,26 @@ final class DiskLedgerTests: XCTestCase {
 
     func testLimitedModeSkipsProtectedRootsWithoutBlockingOrdinaryCaches() {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        XCTAssertTrue(FileAccessService.shouldSkip(
-            home.appendingPathComponent("Desktop/report.pdf"),
-            in: .limited
-        ))
-        XCTAssertTrue(FileAccessService.shouldSkip(
-            home.appendingPathComponent("Library/Containers/com.example.app/data"),
-            in: .limited
-        ))
-        XCTAssertFalse(FileAccessService.shouldSkip(
-            home.appendingPathComponent(".cache/tool/index"),
-            in: .limited
-        ))
-        XCTAssertFalse(FileAccessService.shouldSkip(
-            home.appendingPathComponent("Desktop/report.pdf"),
-            in: .full
-        ))
+        XCTAssertTrue(
+            FileAccessService.shouldSkip(
+                home.appendingPathComponent("Desktop/report.pdf"),
+                in: .limited
+            ))
+        XCTAssertTrue(
+            FileAccessService.shouldSkip(
+                home.appendingPathComponent("Library/Containers/com.example.app/data"),
+                in: .limited
+            ))
+        XCTAssertFalse(
+            FileAccessService.shouldSkip(
+                home.appendingPathComponent(".cache/tool/index"),
+                in: .limited
+            ))
+        XCTAssertFalse(
+            FileAccessService.shouldSkip(
+                home.appendingPathComponent("Desktop/report.pdf"),
+                in: .full
+            ))
     }
 
     func testFreshUnchangedSourceCanBeReusedButDeepScanCannot() {
@@ -226,17 +234,19 @@ final class DiskLedgerTests: XCTestCase {
             scannedAt: now.addingTimeInterval(-60)
         )
 
-        XCTAssertTrue(DiskLedgerScanner.shouldReuse(
-            snapshot,
-            currentModifiedAt: modifiedAt,
-            now: now
-        ))
-        XCTAssertFalse(DiskLedgerScanner.shouldReuse(
-            snapshot,
-            currentModifiedAt: modifiedAt,
-            now: now,
-            forceDeep: true
-        ))
+        XCTAssertTrue(
+            DiskLedgerScanner.shouldReuse(
+                snapshot,
+                currentModifiedAt: modifiedAt,
+                now: now
+            ))
+        XCTAssertFalse(
+            DiskLedgerScanner.shouldReuse(
+                snapshot,
+                currentModifiedAt: modifiedAt,
+                now: now,
+                forceDeep: true
+            ))
     }
 
     func testChangedOrExpiredSourceIsRescanned() {
@@ -247,22 +257,24 @@ final class DiskLedgerTests: XCTestCase {
             modifiedAt: modifiedAt,
             scannedAt: now.addingTimeInterval(-60)
         )
-        XCTAssertFalse(DiskLedgerScanner.shouldReuse(
-            changed,
-            currentModifiedAt: modifiedAt.addingTimeInterval(1),
-            now: now
-        ))
+        XCTAssertFalse(
+            DiskLedgerScanner.shouldReuse(
+                changed,
+                currentModifiedAt: modifiedAt.addingTimeInterval(1),
+                now: now
+            ))
 
         let expired = sourceSnapshot(
             category: .cacheTemporary,
             modifiedAt: modifiedAt,
             scannedAt: now.addingTimeInterval(-DiskLedgerScanner.cacheLifetime(for: .cacheTemporary) - 1)
         )
-        XCTAssertFalse(DiskLedgerScanner.shouldReuse(
-            expired,
-            currentModifiedAt: modifiedAt,
-            now: now
-        ))
+        XCTAssertFalse(
+            DiskLedgerScanner.shouldReuse(
+                expired,
+                currentModifiedAt: modifiedAt,
+                now: now
+            ))
     }
 
     func testPartialLedgerCheckpointRoundTrips() throws {

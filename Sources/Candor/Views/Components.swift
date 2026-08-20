@@ -5,7 +5,8 @@ import SwiftUI
 enum CandorIcon {
     static let image: NSImage = {
         guard let url = Bundle.main.url(forResource: "CandorIcon", withExtension: "icns"),
-              let image = NSImage(contentsOf: url) else {
+            let image = NSImage(contentsOf: url)
+        else {
             return NSApplication.shared.applicationIconImage
         }
         return image
@@ -36,40 +37,6 @@ struct PageHeader: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct MetricCard: View {
-    let title: String
-    let value: String
-    let detail: String
-    let systemImage: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(color.opacity(0.14))
-                Image(systemName: systemImage)
-                    .font(.system(size: 21, weight: .semibold))
-                    .foregroundStyle(color)
-            }
-            .frame(width: 46, height: 46)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.caption).foregroundStyle(.secondary)
-                Text(value).font(.title3.weight(.semibold))
-                Text(detail).font(.caption2).foregroundStyle(.tertiary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(16)
-        .background(.background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(.separator.opacity(0.35))
-        }
     }
 }
 
@@ -115,7 +82,7 @@ struct CleanupItemsPanel: View {
     var body: some View {
         if items.isEmpty {
             EmptyStateView(title: emptyTitle, message: emptyMessage, systemImage: "checkmark.circle")
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {

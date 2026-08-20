@@ -17,7 +17,7 @@ struct LargeItemsView: View {
 
     private var managedAncestor: (depth: Int, item: StorageItem)? {
         for (index, item) in state.largeItemPath.enumerated().reversed()
-            where item.action == .removeAsUnit {
+        where item.action == .removeAsUnit {
             return (index + 1, item)
         }
         return nil
@@ -81,7 +81,7 @@ struct LargeItemsView: View {
                                 NSWorkspace.shared.activateFileViewerSelecting([item.url])
                             }
                         }
-                    }
+                }
                 .listStyle(.inset)
             }
 
@@ -92,9 +92,10 @@ struct LargeItemsView: View {
                             if state.storageDataState == .analyzing {
                                 ProgressView().controlSize(.small)
                             }
-                            Text(state.storageDataState == .analyzing
-                                ? "正在分析大文件与目录"
-                                : "完成空间分析后可选择项目")
+                            Text(
+                                state.storageDataState == .analyzing
+                                    ? "正在分析大文件与目录"
+                                    : "完成空间分析后可选择项目")
                         }
                     } else {
                         Label(
@@ -153,7 +154,8 @@ struct LargeItemsView: View {
             Spacer()
 
             if let managedAncestor,
-               managedAncestor.depth < state.largeItemPath.count {
+                managedAncestor.depth < state.largeItemPath.count
+            {
                 Button {
                     state.navigateLargeItems(to: managedAncestor.depth)
                 } label: {
@@ -213,11 +215,12 @@ struct LargeItemsView: View {
 
             Button("选择当前可处理项") {
                 for item in visibleItems
-                    where item.action == .selectable && item.risk < .sensitive {
+                where item.action == .selectable && item.risk < .sensitive {
                     state.setLargeItem(item, selected: true)
                 }
             }
-                .disabled(!visibleItems.contains {
+            .disabled(
+                !visibleItems.contains {
                     $0.action == .selectable && $0.risk < .sensitive
                 })
             Button("取消选择") { state.clearCurrentLargeItemSelection() }

@@ -101,8 +101,8 @@ struct MainView: View {
                     state.isLimitedAccess ? "当前为有限扫描" : "磁盘访问已就绪",
                     systemImage: state.isLimitedAccess ? "exclamationmark.shield.fill" : "checkmark.shield.fill"
                 )
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(state.isLimitedAccess ? .orange : .green)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(state.isLimitedAccess ? .orange : .green)
                 Text(state.isLimitedAccess ? "部分目录会显示为未归类" : "扫描时不再逐目录询问权限")
                     .font(.caption2)
                     .foregroundStyle(.secondary)

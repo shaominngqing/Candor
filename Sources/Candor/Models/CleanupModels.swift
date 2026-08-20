@@ -197,10 +197,6 @@ struct StorageSnapshot: Sendable {
     let available: Int64
 
     var used: Int64 { max(total - available, 0) }
-    var usedFraction: Double {
-        guard total > 0 else { return 0 }
-        return min(max(Double(used) / Double(total), 0), 1)
-    }
 }
 
 enum StorageCategoryKind: String, CaseIterable, Identifiable, Sendable, Codable {
@@ -469,8 +465,6 @@ struct DeletionReport: Sendable {
     let movedCount: Int
     let movedBytes: Int64
     let failures: [DeletionFailure]
-
-    var isSuccess: Bool { failures.isEmpty }
 }
 
 enum ByteFormatting {

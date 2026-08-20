@@ -8,7 +8,7 @@ struct SafeCleanupView: View {
     @State private var showsExcluded = false
 
     private let riskOrder: [CleanupRiskLevel] = [
-        .disposable, .regenerable, .reacquirable, .sensitive
+        .disposable, .regenerable, .reacquirable, .sensitive,
     ]
 
     private var selectedItems: [CleanupItem] { state.selectedSafeCleanupItems }
@@ -76,11 +76,13 @@ struct SafeCleanupView: View {
                     .frame(width: state.cleanupLevel == nil ? 390 : 330)
                     .disabled(!isCleanupDataReady)
 
-                    Text(isCleanupDataReady
-                        ? (state.cleanupLevel?.detail ?? "已手动调整选择")
-                        : cleanupAnalysisMessage)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        isCleanupDataReady
+                            ? (state.cleanupLevel?.detail ?? "已手动调整选择")
+                            : cleanupAnalysisMessage
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                     Spacer()
                 }
 
@@ -330,7 +332,8 @@ struct SafeCleanupView: View {
 
     private var largestSelectedSummary: String? {
         guard !selectedItems.isEmpty else { return nil }
-        return selectedItems
+        return
+            selectedItems
             .prefix(3)
             .map { "\($0.displayName) \(ByteFormatting.string($0.size))" }
             .joined(separator: "、")
@@ -403,7 +406,7 @@ struct SafeCleanupView: View {
     private var confirmationMessage: String {
         var parts = [
             "共 \(selectedItems.count) 项，\(ByteFormatting.string(selectedBytes))。",
-            selectionStatus.detail
+            selectionStatus.detail,
         ]
         if let largestSelectedSummary {
             parts.append("最大项目：\(largestSelectedSummary)。")

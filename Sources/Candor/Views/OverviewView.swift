@@ -41,7 +41,8 @@ struct OverviewView: View {
             ProgressView(value: state.ledgerProgressFraction)
 
             if !state.isDeepScanning,
-               state.reusedLedgerSources > 0 || state.rescannedLedgerSources > 0 {
+                state.reusedLedgerSources > 0 || state.rescannedLedgerSources > 0
+            {
                 Text("复用 \(state.reusedLedgerSources) · 更新 \(state.rescannedLedgerSources)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -55,8 +56,10 @@ struct OverviewView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("已用 \(ByteFormatting.string(state.storage.used)) / \(ByteFormatting.string(state.storage.total))")
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "已用 \(ByteFormatting.string(state.storage.used)) / \(ByteFormatting.string(state.storage.total))"
+                    )
+                    .foregroundStyle(.secondary)
                     Spacer()
                     Text("可用 \(ByteFormatting.string(state.storage.available))")
                         .font(.headline.monospacedDigit())
@@ -139,8 +142,8 @@ struct OverviewView: View {
                     detail: !isStorageDataReady
                         ? storageMetricDetail
                         : state.ledgerInaccessibleCount > 0
-                        ? "\(state.ledgerInaccessibleCount) 处无法访问"
-                        : "查看权限与系统差额",
+                            ? "\(state.ledgerInaccessibleCount) 处无法访问"
+                            : "查看权限与系统差额",
                     showsDisclosure: true
                 )
             }

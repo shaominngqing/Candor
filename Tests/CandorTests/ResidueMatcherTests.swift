@@ -1,26 +1,30 @@
 import XCTest
-@testable import YuJing
+
+@testable import Candor
 
 final class ResidueMatcherTests: XCTestCase {
     func testMatchesBundleIdentifierAndDerivedFiles() {
-        XCTAssertTrue(ResidueMatcher.isRelated(
-            candidateName: "com.example.Writer.savedState",
-            appName: "Writer",
-            bundleIdentifier: "com.example.Writer"
-        ))
-        XCTAssertTrue(ResidueMatcher.isRelated(
-            candidateName: "com.example.Writer.plist",
-            appName: "Writer",
-            bundleIdentifier: "com.example.Writer"
-        ))
+        XCTAssertTrue(
+            ResidueMatcher.isRelated(
+                candidateName: "com.example.Writer.savedState",
+                appName: "Writer",
+                bundleIdentifier: "com.example.Writer"
+            ))
+        XCTAssertTrue(
+            ResidueMatcher.isRelated(
+                candidateName: "com.example.Writer.plist",
+                appName: "Writer",
+                bundleIdentifier: "com.example.Writer"
+            ))
     }
 
     func testDoesNotUseVeryShortAppNames() {
-        XCTAssertFalse(ResidueMatcher.isRelated(
-            candidateName: "Go",
-            appName: "Go",
-            bundleIdentifier: nil
-        ))
+        XCTAssertFalse(
+            ResidueMatcher.isRelated(
+                candidateName: "Go",
+                appName: "Go",
+                bundleIdentifier: nil
+            ))
     }
 
     func testRecognizesPlausibleOrphanBundleID() {
@@ -30,14 +34,16 @@ final class ResidueMatcherTests: XCTestCase {
     }
 
     func testInstalledParentBundleCoversHelpers() {
-        XCTAssertTrue(ResidueMatcher.belongsToInstalledApp(
-            "com.example.Writer.helper",
-            installedBundleIDs: ["com.example.Writer"]
-        ))
-        XCTAssertFalse(ResidueMatcher.belongsToInstalledApp(
-            "com.other.Legacy",
-            installedBundleIDs: ["com.example.Writer"]
-        ))
+        XCTAssertTrue(
+            ResidueMatcher.belongsToInstalledApp(
+                "com.example.Writer.helper",
+                installedBundleIDs: ["com.example.Writer"]
+            ))
+        XCTAssertFalse(
+            ResidueMatcher.belongsToInstalledApp(
+                "com.other.Legacy",
+                installedBundleIDs: ["com.example.Writer"]
+            ))
     }
 }
 
@@ -68,9 +74,10 @@ final class DeletionSafetyTests: XCTestCase {
             isDirectory: true
         )
         XCTAssertThrowsError(try DeletionService.validate(codexStagingRoot))
-        XCTAssertNoThrow(try DeletionService.validate(
-            codexStagingRoot.appendingPathComponent("openai-bundled.staging-example")
-        ))
+        XCTAssertNoThrow(
+            try DeletionService.validate(
+                codexStagingRoot.appendingPathComponent("openai-bundled.staging-example")
+            ))
 
         let gradleCacheRoot = home.appendingPathComponent(".gradle/caches", isDirectory: true)
         XCTAssertThrowsError(try DeletionService.validate(gradleCacheRoot))

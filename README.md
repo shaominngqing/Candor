@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="AppResources/AppIcon-1024.png" width="112" alt="Candor app icon">
+  <img src="AppResources/CandorIcon-1024.png" width="112" alt="Candor app icon">
 </p>
 
 <h1 align="center">Candor</h1>
@@ -11,7 +11,7 @@
 <p align="center">
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-111111?style=flat-square&logo=apple">
   <img alt="Swift 5.10" src="https://img.shields.io/badge/Swift-5.10-F05138?style=flat-square&logo=swift&logoColor=white">
-  <img alt="Version 0.12.3" src="https://img.shields.io/badge/version-0.12.3-007AFF?style=flat-square">
+  <img alt="Version 0.13.0" src="https://img.shields.io/badge/version-0.13.0-007AFF?style=flat-square">
   <img alt="Local only" src="https://img.shields.io/badge/analysis-local%20only-34C759?style=flat-square">
   <a href="https://github.com/shaominngqing/Candor/actions/workflows/build-release.yml"><img alt="Build" src="https://github.com/shaominngqing/Candor/actions/workflows/build-release.yml/badge.svg"></a>
 </p>
@@ -116,7 +116,7 @@ Candor 不用一个含糊的“深度清理”按钮制造压力，而是把范�
 ```bash
 git clone git@github.com:shaominngqing/Candor.git
 cd Candor
-swift run YuJing
+swift run Candor
 ```
 
 生成可以双击运行的应用包：
@@ -137,20 +137,20 @@ swift test
 ## 项目结构
 
 ```text
-Sources/YuJing/
+Sources/Candor/
 ├── Models/       数据模型与风险等级
 ├── Services/     磁盘扫描、账本缓存、文件匹配与安全删除
 ├── ViewModels/   全局状态、增量更新与选择管理
 └── Views/        原生 SwiftUI 界面
 
-Tests/YuJingTests/  路径安全、分类、扫描复用与性能测试
-AppResources/       图标、Info.plist 与隐私清单
-Docs/               产品规划与界面截图
+Tests/CandorTests/  路径安全、分类、扫描复用与性能测试
+AppResources/       应用图标、Info.plist 与隐私清单
+Docs/images/        README 使用的产品截图
 ```
 
 ## 当前状态
 
-Candor 目前处于 **0.12.3 开发测试阶段**。核心扫描、空间对账、分级建议、应用关联分析和废纸篓删除流程已经可用，但仍应在重要数据已有备份的环境中测试。
+Candor 目前处于 **0.13.0 公开测试阶段**。核心扫描、空间对账、分级建议、应用关联分析和废纸篓删除流程已经可用，但仍应在重要数据已有备份的环境中测试。
 
 已知边界：
 
@@ -159,4 +159,4 @@ Candor 目前处于 **0.12.3 开发测试阶段**。核心扫描、空间对账�
 - SDK、虚拟机、本地模型等大型资源通常更适合按完整组件处理，部分内容会引导回来源工具管理。
 - 当前不提供永久粉碎、自动清空废纸篓、关闭 SIP 或修改系统保护范围的功能。
 
-产品调研、竞品分析和后续路线见 [Docs/PRODUCT_PLAN.md](Docs/PRODUCT_PLAN.md)。
+版本变化见 [CHANGELOG.md](CHANGELOG.md)。

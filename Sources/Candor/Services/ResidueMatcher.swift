@@ -6,7 +6,8 @@ enum ResidueMatcher {
         for suffix in [".savedstate", ".plist", ".cache", ".log"] where result.hasSuffix(suffix) {
             result.removeLast(suffix.count)
         }
-        return result
+        return
+            result
             .replacingOccurrences(of: " ", with: "")
             .replacingOccurrences(of: "-", with: "")
             .replacingOccurrences(of: "_", with: "")

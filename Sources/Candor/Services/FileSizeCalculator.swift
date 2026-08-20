@@ -5,7 +5,7 @@ enum FileSizeCalculator {
         .isRegularFileKey,
         .isSymbolicLinkKey,
         .fileAllocatedSizeKey,
-        .totalFileAllocatedSizeKey
+        .totalFileAllocatedSizeKey,
     ]
 
     static func allocatedSize(of url: URL) -> Int64 {
@@ -15,12 +15,14 @@ enum FileSizeCalculator {
             return Int64(initialValues.totalFileAllocatedSize ?? initialValues.fileAllocatedSize ?? 0)
         }
 
-        guard let enumerator = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: Array(keys),
-            options: [],
-            errorHandler: { _, _ in true }
-        ) else { return 0 }
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: Array(keys),
+                options: [],
+                errorHandler: { _, _ in true }
+            )
+        else { return 0 }
 
         var total: Int64 = 0
         for case let fileURL as URL in enumerator {

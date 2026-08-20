@@ -17,7 +17,7 @@ enum FileAccessService {
         let protectedDirectories = [
             home.appendingPathComponent("Library/Mail", isDirectory: true),
             home.appendingPathComponent("Library/Messages", isDirectory: true),
-            home.appendingPathComponent("Library/Safari", isDirectory: true)
+            home.appendingPathComponent("Library/Safari", isDirectory: true),
         ]
         var existingDirectoryCount = FileManager.default.fileExists(atPath: tccDatabase.path) ? 1 : 0
 
@@ -37,9 +37,11 @@ enum FileAccessService {
 
     @discardableResult
     static func openFullDiskAccessSettings() -> Bool {
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
-        ) else { return false }
+        guard
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+            )
+        else { return false }
         return NSWorkspace.shared.open(url)
     }
 
@@ -63,7 +65,7 @@ enum FileAccessService {
             "Library/CloudStorage",
             "Library/Calendars",
             "Library/AddressBook",
-            "Library/HomeKit"
+            "Library/HomeKit",
         ].map { URL(fileURLWithPath: home).appendingPathComponent($0).standardizedFileURL.path }
 
         return protectedRoots.contains { root in

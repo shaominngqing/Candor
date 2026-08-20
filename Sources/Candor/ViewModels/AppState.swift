@@ -109,7 +109,8 @@ final class AppState: ObservableObject {
             sceneSizes: cached.scan.sceneSizes,
             sourceCounts: cached.scan.sceneSourceCounts
         )
-        scanPhase = cached.isComplete
+        scanPhase =
+            cached.isComplete
             ? "已显示上次空间账本，正在核对变化"
             : "已恢复上次进度，正在继续分析"
     }
@@ -157,7 +158,8 @@ final class AppState: ObservableObject {
     func showAccessSetup() {
         fullDiskAccessStatus = FileAccessService.fullDiskAccessStatus()
         isAccessSetupPresented = true
-        accessSetupMessage = fileAccessMode == .limited
+        accessSetupMessage =
+            fileAccessMode == .limited
             ? "当前使用有限扫描。补充完全磁盘访问权限后，才能一次覆盖受保护目录。"
             : "开启后只读取文件名、路径、大小和日期，所有分析都在本机完成。"
     }
@@ -169,7 +171,8 @@ final class AppState: ObservableObject {
 
     func openFullDiskAccessSettings() {
         let opened = FileAccessService.openFullDiskAccessSettings()
-        accessSetupMessage = opened
+        accessSetupMessage =
+            opened
             ? "请点“+”加入 Candor 并打开开关；如果系统要求退出，请重新打开 Candor，扫描会自动开始。"
             : "无法打开系统设置，请手动前往“隐私与安全性 → 完全磁盘访问权限”。"
     }
@@ -204,9 +207,6 @@ final class AppState: ObservableObject {
         return applications.first { $0.id == selectedApplicationID }
     }
 
-    var safeCleanupTotal: Int64 {
-        safeCleanupItems.filter { !isCleanupItemExcluded($0) }.reduce(0) { $0 + $1.size }
-    }
     var safeCandidateBytes: Int64 {
         cleanupBytes(for: .recommended)
     }
@@ -215,12 +215,8 @@ final class AppState: ObservableObject {
             !isCleanupItemExcluded($0)
                 && ($0.recommendedLevel == nil || $0.recommendedLevel! > .recommended)
         }
-            .reduce(0) { $0 + $1.size }
+        .reduce(0) { $0 + $1.size }
     }
-    var selectedSafeCleanupBytes: Int64 {
-        safeCleanupSelection.bytes
-    }
-
     var selectedSafeCleanupItems: [CleanupItem] {
         safeCleanupSelection.items
     }
@@ -378,9 +374,10 @@ final class AppState: ObservableObject {
                 guard !Task.isCancelled else { return }
 
                 await self.receiveRefreshPhase("正在读取应用信息…", scanID: scanID)
-                let sizeHints = Dictionary(uniqueKeysWithValues: ledger.sourceSnapshots.map {
-                    ($0.url.standardizedFileURL, $0.size)
-                })
+                let sizeHints = Dictionary(
+                    uniqueKeysWithValues: ledger.sourceSnapshots.map {
+                        ($0.url.standardizedFileURL, $0.size)
+                    })
                 let scannedApplications = FileScanner.installedApplications(sizeHints: sizeHints)
                 guard !Task.isCancelled else { return }
                 await self.receiveApplications(scannedApplications, scanID: scanID)
@@ -403,12 +400,16 @@ final class AppState: ObservableObject {
     private func receiveStorage(_ snapshot: StorageSnapshot, scanID: UUID) {
         guard refreshScanID == scanID else { return }
         storage = snapshot
-        let existingSizes = Dictionary(uniqueKeysWithValues: storageCategories
-            .filter { $0.kind != .unexplained }
-            .map { ($0.kind, $0.size) })
-        let existingCounts = Dictionary(uniqueKeysWithValues: storageCategories
-            .filter { $0.kind != .unexplained }
-            .map { ($0.kind, $0.sourceCount) })
+        let existingSizes = Dictionary(
+            uniqueKeysWithValues:
+                storageCategories
+                .filter { $0.kind != .unexplained }
+                .map { ($0.kind, $0.size) })
+        let existingCounts = Dictionary(
+            uniqueKeysWithValues:
+                storageCategories
+                .filter { $0.kind != .unexplained }
+                .map { ($0.kind, $0.sourceCount) })
         storageCategories = makeStorageCategories(
             categorySizes: existingSizes,
             sourceCounts: existingCounts,
@@ -514,7 +515,8 @@ final class AppState: ObservableObject {
         refreshScanID = nil
 
         if let selectedApplicationID,
-           !finalApplications.contains(where: { $0.id == selectedApplicationID }) {
+            !finalApplications.contains(where: { $0.id == selectedApplicationID })
+        {
             self.selectedApplicationID = nil
             relatedItems = []
         }
@@ -598,7 +600,8 @@ final class AppState: ObservableObject {
 
     func setSafeCleanupItem(_ item: CleanupItem, selected: Bool) {
         guard safeCleanupItems.contains(where: { $0.id == item.id }),
-              !isCleanupItemExcluded(item) else { return }
+            !isCleanupItemExcluded(item)
+        else { return }
         let url = item.url.standardizedFileURL
         var urls = safeCleanupSelection.urls
         if selected {
@@ -731,8 +734,9 @@ final class AppState: ObservableObject {
     ) -> [InstalledApplication] {
         var result = scannedApplications
         if let selectedApplicationID,
-           let inspected = applications.first(where: { $0.id == selectedApplicationID }),
-           !result.contains(where: { $0.id == inspected.id }) {
+            let inspected = applications.first(where: { $0.id == selectedApplicationID }),
+            !result.contains(where: { $0.id == inspected.id })
+        {
             result.append(inspected)
         }
         return result.sorted {
@@ -746,19 +750,6 @@ final class AppState: ObservableObject {
         selectedStorageScene = nil
         largeItemPath = []
         selectedSection = .largeItems
-    }
-
-    func showStorageScene(_ kind: StorageSceneKind) {
-        selectedStorageScene = kind
-        selectedStorageCategory = nil
-        largeItemPath = []
-        selectedSection = .largeItems
-    }
-
-    func resetLargeItemNavigation() {
-        largeItemWorkerTask?.cancel()
-        largeItemPath = []
-        isScanningLargeItemFolder = false
     }
 
     func enterLargeItem(_ item: StorageItem) {
@@ -829,13 +820,6 @@ final class AppState: ObservableObject {
         } else {
             selectedLargeItemURLs.remove(url)
             selectedLargeItemIndex[url] = nil
-        }
-    }
-
-    func selectAllCurrentLargeItems() {
-        for item in currentLargeItems
-            where item.action == .selectable && item.risk < .sensitive {
-            setLargeItem(item, selected: true)
         }
     }
 
@@ -971,7 +955,8 @@ final class AppState: ObservableObject {
             if report.failures.isEmpty {
                 feedback = Feedback(
                     title: "已安全移到废纸篓",
-                    message: "共移动 \(report.movedCount) 项，约 \(ByteFormatting.string(report.movedBytes))。这部分空间会在清空废纸篓后真正释放，之前仍可恢复。"
+                    message:
+                        "共移动 \(report.movedCount) 项，约 \(ByteFormatting.string(report.movedBytes))。这部分空间会在清空废纸篓后真正释放，之前仍可恢复。"
                 )
             } else {
                 let failures = report.failures.prefix(3).map {

@@ -189,7 +189,8 @@ struct ApplicationUninstallView: View {
                     Button("选择推荐项") {
                         for index in state.relatedItems.indices {
                             let item = state.relatedItems[index]
-                            state.relatedItems[index].isSelected = item.risk <= .regenerable
+                            state.relatedItems[index].isSelected =
+                                item.risk <= .regenerable
                                 || (item.category == .application && canRemove(item))
                         }
                     }
@@ -271,9 +272,11 @@ struct ApplicationUninstallView: View {
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first(where: {
-            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
-        }) else { return false }
+        guard
+            let provider = providers.first(where: {
+                $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+            })
+        else { return false }
 
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             let url: URL?

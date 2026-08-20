@@ -90,7 +90,7 @@ enum FileScanner {
             explanation: "应用的用户级后台启动项。",
             impact: "相关后台服务将不再自动启动。",
             recommendedLevel: nil
-        )
+        ),
     ]
 
     private static let orphanLocations: [SearchLocation] = [
@@ -117,7 +117,7 @@ enum FileScanner {
             explanation: "未匹配到现有应用的窗口状态候选。",
             impact: "若仍有应用使用它，窗口状态会被重置。",
             recommendedLevel: .deep
-        )
+        ),
     ]
 
     static func installedApplications(sizeHints: [URL: Int64] = [:]) -> [InstalledApplication] {
@@ -125,19 +125,21 @@ enum FileScanner {
         let home = fileManager.homeDirectoryForCurrentUser
         let roots = [
             URL(fileURLWithPath: "/Applications", isDirectory: true),
-            home.appendingPathComponent("Applications", isDirectory: true)
+            home.appendingPathComponent("Applications", isDirectory: true),
         ]
         let currentExecutable = Bundle.main.bundleURL.standardizedFileURL
         var foundURLs = Set<URL>()
 
         for root in roots where fileManager.fileExists(atPath: root.path) {
             if Task.isCancelled { break }
-            guard let enumerator = fileManager.enumerator(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey],
-                options: [.skipsHiddenFiles, .skipsPackageDescendants],
-                errorHandler: { _, _ in true }
-            ) else { continue }
+            guard
+                let enumerator = fileManager.enumerator(
+                    at: root,
+                    includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey],
+                    options: [.skipsHiddenFiles, .skipsPackageDescendants],
+                    errorHandler: { _, _ in true }
+                )
+            else { continue }
 
             for case let url as URL in enumerator where url.pathExtension.lowercased() == "app" {
                 if Task.isCancelled { break }
@@ -163,16 +165,18 @@ enum FileScanner {
         let url = sourceURL.standardizedFileURL
         guard url.pathExtension.lowercased() == "app", let bundle = Bundle(url: url) else { return nil }
         let info = bundle.infoDictionary ?? [:]
-        let displayName = (info["CFBundleDisplayName"] as? String)
+        let displayName =
+            (info["CFBundleDisplayName"] as? String)
             ?? (info["CFBundleName"] as? String)
             ?? url.deletingPathExtension().lastPathComponent
-        let version = (info["CFBundleShortVersionString"] as? String)
+        let version =
+            (info["CFBundleShortVersionString"] as? String)
             ?? (info["CFBundleVersion"] as? String)
         let terms = [
             displayName,
             info["CFBundleName"] as? String,
             info["CFBundleExecutable"] as? String,
-            url.deletingPathExtension().lastPathComponent
+            url.deletingPathExtension().lastPathComponent,
         ].compactMap { $0 }
             .filter { !$0.isEmpty }
         let modifiedAt = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
@@ -277,27 +281,31 @@ enum FileScanner {
         sizeHints: [URL: Int64] = [:],
         accessMode: ScanAccessMode = .full
     ) -> [CleanupItem] {
-        let candidates = cacheItems(sizeHints: sizeHints)
+        let candidates =
+            cacheItems(sizeHints: sizeHints)
             + oldLogItems(sizeHints: sizeHints)
             + oldInstallerItems(sizeHints: sizeHints, accessMode: accessMode)
             + orphanedItems(installedBundleIDs: installedBundleIDs, sizeHints: sizeHints)
             + rebuildableDeveloperItems(sizeHints: sizeHints)
             + staleCodexStagingItems(sizeHints: sizeHints)
 
-        return Array(Dictionary(grouping: candidates, by: { $0.url.standardizedFileURL })
-            .compactMap { $0.value.first })
-            .sorted {
-                if $0.size != $1.size { return $0.size > $1.size }
-                return $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
-            }
+        return Array(
+            Dictionary(grouping: candidates, by: { $0.url.standardizedFileURL })
+                .compactMap { $0.value.first }
+        )
+        .sorted {
+            if $0.size != $1.size { return $0.size > $1.size }
+            return $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+        }
     }
 
     static func storageSnapshot() -> StorageSnapshot {
         let fileManager = FileManager.default
         let homePath = fileManager.homeDirectoryForCurrentUser.path
         guard let attributes = try? fileManager.attributesOfFileSystem(forPath: homePath),
-              let totalNumber = attributes[.systemSize] as? NSNumber,
-              let freeNumber = attributes[.systemFreeSize] as? NSNumber else {
+            let totalNumber = attributes[.systemSize] as? NSNumber,
+            let freeNumber = attributes[.systemFreeSize] as? NSNumber
+        else {
             return StorageSnapshot(total: 0, available: 0)
         }
         return StorageSnapshot(total: totalNumber.int64Value, available: freeNumber.int64Value)
@@ -309,8 +317,9 @@ enum FileScanner {
         now: Date = Date()
     ) -> Bool {
         guard let modifiedAt,
-              size >= 10 * 1_024 * 1_024,
-              let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: now) else {
+            size >= 10 * 1_024 * 1_024,
+            let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: now)
+        else {
             return false
         }
         return modifiedAt < cutoff
@@ -387,7 +396,7 @@ enum FileScanner {
                     impact: "项目下次编译会重新生成索引和构建产物。",
                     recommendedLevel: .deep
                 )
-            )
+            ),
         ]
 
         return locations.flatMap { root, location in

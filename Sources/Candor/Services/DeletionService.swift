@@ -74,10 +74,11 @@ enum DeletionService {
                 movedCount += 1
                 movedBytes += item.size
             } catch {
-                failures.append(DeletionFailure(
-                    url: item.url,
-                    message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                ))
+                failures.append(
+                    DeletionFailure(
+                        url: item.url,
+                        message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    ))
             }
         }
 
@@ -113,7 +114,7 @@ enum DeletionService {
             home.appendingPathComponent("Library/Developer/Xcode/DerivedData", isDirectory: true),
             home.appendingPathComponent(".cache", isDirectory: true),
             home.appendingPathComponent(".gradle/caches", isDirectory: true),
-            home.appendingPathComponent(".codex/.tmp/bundled-marketplaces", isDirectory: true)
+            home.appendingPathComponent(".codex/.tmp/bundled-marketplaces", isDirectory: true),
         ].map { $0.standardizedFileURL.resolvingSymlinksInPath() }
 
         if canonicalURL == Bundle.main.bundleURL.standardizedFileURL.resolvingSymlinksInPath() {
@@ -121,11 +122,13 @@ enum DeletionService {
         }
 
         if checkRunningApplications,
-           canonicalURL.pathExtension.lowercased() == "app",
-           let bundle = Bundle(url: canonicalURL),
-           let bundleIdentifier = bundle.bundleIdentifier,
-           !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty {
-            let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            canonicalURL.pathExtension.lowercased() == "app",
+            let bundle = Bundle(url: canonicalURL),
+            let bundleIdentifier = bundle.bundleIdentifier,
+            !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
+        {
+            let name =
+                (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
                 ?? canonicalURL.deletingPathExtension().lastPathComponent
             throw SafetyError.applicationIsRunning(name)
         }
@@ -162,7 +165,7 @@ enum DeletionService {
             (sdk.appendingPathComponent("platforms", isDirectory: true), 1, .androidPlatform),
             (sdk.appendingPathComponent("system-images", isDirectory: true), 3, .androidSystemImage),
             (sdk.appendingPathComponent("sources", isDirectory: true), 1, .androidSources),
-            (sdk.appendingPathComponent("cmake", isDirectory: true), 1, .androidCMake)
+            (sdk.appendingPathComponent("cmake", isDirectory: true), 1, .androidCMake),
         ]
 
         for (rootURL, unitDepth, kind) in patterns {
@@ -170,7 +173,8 @@ enum DeletionService {
             guard url.path.hasPrefix(root.path + "/") else { continue }
             let relativeComponents = Array(url.pathComponents.dropFirst(root.pathComponents.count))
             guard relativeComponents.count >= unitDepth,
-                  !relativeComponents.prefix(unitDepth).contains(where: { $0.hasPrefix(".") }) else {
+                !relativeComponents.prefix(unitDepth).contains(where: { $0.hasPrefix(".") })
+            else {
                 continue
             }
             var unitURL = root

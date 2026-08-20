@@ -3,23 +3,23 @@
 import PackageDescription
 
 let package = Package(
-    name: "YuJing",
+    name: "Candor",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "YuJing", targets: ["YuJing"])
+        .executable(name: "Candor", targets: ["Candor"])
     ],
     targets: [
         .executableTarget(
-            name: "YuJing",
-            path: "Sources/YuJing"
+            name: "Candor",
+            path: "Sources/Candor"
         ),
         .testTarget(
-            name: "YuJingTests",
-            dependencies: ["YuJing"],
-            path: "Tests/YuJingTests"
-        )
+            name: "CandorTests",
+            dependencies: ["Candor"],
+            path: "Tests/CandorTests"
+        ),
     ],
     swiftLanguageVersions: [.v5]
 )

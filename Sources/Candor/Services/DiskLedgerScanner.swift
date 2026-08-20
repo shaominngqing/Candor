@@ -42,7 +42,7 @@ enum DiskLedgerScanner {
         .isPackageKey,
         .fileAllocatedSizeKey,
         .totalFileAllocatedSizeKey,
-        .contentModificationDateKey
+        .contentModificationDateKey,
     ]
 
     static func scan(
@@ -52,19 +52,21 @@ enum DiskLedgerScanner {
         progress: @escaping @Sendable (StorageLedgerProgress) -> Void = { _ in }
     ) throws -> StorageLedgerScan {
         let sources = scanSources(accessMode: accessMode)
-        let sourceIndex = Dictionary(uniqueKeysWithValues: sources.map {
-            (
-                $0.url.standardizedFileURL,
-                "\($0.category.rawValue)|\($0.scene?.rawValue ?? "")"
-            )
-        })
+        let sourceIndex = Dictionary(
+            uniqueKeysWithValues: sources.map {
+                (
+                    $0.url.standardizedFileURL,
+                    "\($0.category.rawValue)|\($0.scene?.rawValue ?? "")"
+                )
+            })
         var snapshots: [URL: StorageSourceSnapshot] = Dictionary(
             uniqueKeysWithValues: cachedSources.compactMap { snapshot -> (URL, StorageSourceSnapshot)? in
-            let url = snapshot.url.standardizedFileURL
-            let fingerprint = "\(snapshot.category.rawValue)|\(snapshot.scene?.rawValue ?? "")"
-            guard sourceIndex[url] == fingerprint,
-                  FileManager.default.fileExists(atPath: url.path) else { return nil }
-            return (url, snapshot)
+                let url = snapshot.url.standardizedFileURL
+                let fingerprint = "\(snapshot.category.rawValue)|\(snapshot.scene?.rawValue ?? "")"
+                guard sourceIndex[url] == fingerprint,
+                    FileManager.default.fileExists(atPath: url.path)
+                else { return nil }
+                return (url, snapshot)
             }
         )
         var reusedSourceCount = 0
@@ -77,16 +79,18 @@ enum DiskLedgerScanner {
             let cached = snapshots[key]
             let currentModifiedAt = modificationDate(of: source.url)
             if let cached,
-               shouldReuse(
-                   cached,
-                   currentModifiedAt: currentModifiedAt,
-                   now: Date(),
-                   forceDeep: forceDeep
-               ) {
+                shouldReuse(
+                    cached,
+                    currentModifiedAt: currentModifiedAt,
+                    now: Date(),
+                    forceDeep: forceDeep
+                )
+            {
                 reusedSourceCount += 1
             } else {
                 let measured = try measure(source.url)
-                let item = measured.size >= largeItemThreshold
+                let item =
+                    measured.size >= largeItemThreshold
                     ? storageItem(source: source, measured: measured)
                     : nil
                 snapshots[key] = StorageSourceSnapshot(
@@ -107,28 +111,30 @@ enum DiskLedgerScanner {
             }
 
             let now = Date()
-            let shouldEmit = index == sources.count - 1
+            let shouldEmit =
+                index == sources.count - 1
                 || index % 4 == 0
                 || now.timeIntervalSince(lastEmission) >= 0.2
             if shouldEmit {
                 lastEmission = now
                 let aggregate = aggregate(Array(snapshots.values))
-                progress(StorageLedgerProgress(
-                    categorySizes: aggregate.categorySizes,
-                    categorySourceCounts: aggregate.categorySourceCounts,
-                    sceneSizes: aggregate.sceneSizes,
-                    sceneSourceCounts: aggregate.sceneSourceCounts,
-                    largeItems: aggregate.largeItems,
-                    analyzedBytes: aggregate.analyzedBytes,
-                    scannedItemCount: aggregate.scannedItemCount,
-                    inaccessibleCount: aggregate.inaccessibleCount,
-                    completedSources: index + 1,
-                    totalSources: sources.count,
-                    currentSource: source.url.path,
-                    reusedSourceCount: reusedSourceCount,
-                    rescannedSourceCount: rescannedSourceCount,
-                    sourceSnapshots: aggregate.sourceSnapshots
-                ))
+                progress(
+                    StorageLedgerProgress(
+                        categorySizes: aggregate.categorySizes,
+                        categorySourceCounts: aggregate.categorySourceCounts,
+                        sceneSizes: aggregate.sceneSizes,
+                        sceneSourceCounts: aggregate.sceneSourceCounts,
+                        largeItems: aggregate.largeItems,
+                        analyzedBytes: aggregate.analyzedBytes,
+                        scannedItemCount: aggregate.scannedItemCount,
+                        inaccessibleCount: aggregate.inaccessibleCount,
+                        completedSources: index + 1,
+                        totalSources: sources.count,
+                        currentSource: source.url.path,
+                        reusedSourceCount: reusedSourceCount,
+                        rescannedSourceCount: rescannedSourceCount,
+                        sourceSnapshots: aggregate.sourceSnapshots
+                    ))
             }
         }
 
@@ -159,8 +165,9 @@ enum DiskLedgerScanner {
             )
             let measured: MeasuredSource
             if let hintedSize = directorySizeHints[url.standardizedFileURL],
-               let values = try? url.resourceValues(forKeys: resourceKeys),
-               values.isDirectory == true {
+                let values = try? url.resourceValues(forKeys: resourceKeys),
+                values.isDirectory == true
+            {
                 measured = MeasuredSource(
                     size: hintedSize,
                     scannedItemCount: 1,
@@ -181,9 +188,10 @@ enum DiskLedgerScanner {
 
     static func directorySizeIndex(at url: URL) throws -> [URL: Int64] {
         let measured = try measure(url)
-        var index = Dictionary(uniqueKeysWithValues: measured.directoryIndex.map {
-            ($0.url.standardizedFileURL, $0.size)
-        })
+        var index = Dictionary(
+            uniqueKeysWithValues: measured.directoryIndex.map {
+                ($0.url.standardizedFileURL, $0.size)
+            })
         if measured.isDirectory {
             index[url.standardizedFileURL] = measured.size
         }
@@ -203,14 +211,16 @@ enum DiskLedgerScanner {
         func append(_ url: URL, category: StorageCategoryKind) {
             let normalized = url.standardizedFileURL
             guard fileManager.fileExists(atPath: normalized.path),
-                  !FileAccessService.shouldSkip(normalized, in: accessMode),
-                  insertedPaths.insert(normalized.path).inserted,
-                  !isSymbolicLink(normalized) else { return }
-            sources.append(Source(
-                url: normalized,
-                category: category,
-                scene: scene(for: normalized)
-            ))
+                !FileAccessService.shouldSkip(normalized, in: accessMode),
+                insertedPaths.insert(normalized.path).inserted,
+                !isSymbolicLink(normalized)
+            else { return }
+            sources.append(
+                Source(
+                    url: normalized,
+                    category: category,
+                    scene: scene(for: normalized)
+                ))
         }
 
         func appendChildren(
@@ -219,11 +229,13 @@ enum DiskLedgerScanner {
             excluding excludedNames: Set<String> = []
         ) {
             guard !FileAccessService.shouldSkip(directory, in: accessMode) else { return }
-            guard let children = try? fileManager.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: Array(resourceKeys),
-                options: []
-            ) else {
+            guard
+                let children = try? fileManager.contentsOfDirectory(
+                    at: directory,
+                    includingPropertiesForKeys: Array(resourceKeys),
+                    options: []
+                )
+            else {
                 append(directory, category: fallback)
                 return
             }
@@ -300,18 +312,20 @@ enum DiskLedgerScanner {
         append: (URL, StorageCategoryKind) -> Void,
         appendChildren: (URL, StorageCategoryKind, Set<String>) -> Void
     ) {
-        guard let children = try? FileManager.default.contentsOfDirectory(
-            at: library,
-            includingPropertiesForKeys: Array(resourceKeys),
-            options: []
-        ) else {
+        guard
+            let children = try? FileManager.default.contentsOfDirectory(
+                at: library,
+                includingPropertiesForKeys: Array(resourceKeys),
+                options: []
+            )
+        else {
             append(library, .appData)
             return
         }
 
         let expanded = Set([
             "Application Support", "Containers", "Group Containers", "Caches",
-            "Developer", "CloudStorage", "Mobile Documents", "Mail"
+            "Developer", "CloudStorage", "Mobile Documents", "Mail",
         ])
         for child in children {
             let fallback = category(for: child, fallback: .appData)
@@ -363,15 +377,17 @@ enum DiskLedgerScanner {
         }
 
         var inaccessibleCount = 0
-        guard let enumerator = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: Array(resourceKeys),
-            options: [],
-            errorHandler: { _, _ in
-                inaccessibleCount += 1
-                return true
-            }
-        ) else {
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: Array(resourceKeys),
+                options: [],
+                errorHandler: { _, _ in
+                    inaccessibleCount += 1
+                    return true
+                }
+            )
+        else {
             return MeasuredSource(
                 size: 0,
                 scannedItemCount: 1,
@@ -392,10 +408,11 @@ enum DiskLedgerScanner {
             guard stack.count > 1 else { return }
             let directory = stack.removeLast()
             if !isPackage, directory.size >= directoryIndexThreshold {
-                directoryIndex.append(StorageDirectorySnapshot(
-                    url: directory.url,
-                    size: directory.size
-                ))
+                directoryIndex.append(
+                    StorageDirectorySnapshot(
+                        url: directory.url,
+                        size: directory.size
+                    ))
             }
             stack[stack.count - 1].size += directory.size
         }
@@ -443,8 +460,9 @@ enum DiskLedgerScanner {
         forceDeep: Bool = false
     ) -> Bool {
         guard !forceDeep,
-              now.timeIntervalSince(snapshot.scannedAt) < cacheLifetime(for: snapshot.category),
-              modificationDatesMatch(snapshot.modifiedAt, currentModifiedAt) else { return false }
+            now.timeIntervalSince(snapshot.scannedAt) < cacheLifetime(for: snapshot.category),
+            modificationDatesMatch(snapshot.modifiedAt, currentModifiedAt)
+        else { return false }
         return true
     }
 
@@ -460,7 +478,7 @@ enum DiskLedgerScanner {
 
     private static func modificationDatesMatch(_ lhs: Date?, _ rhs: Date?) -> Bool {
         switch (lhs, rhs) {
-        case let (lhs?, rhs?): abs(lhs.timeIntervalSince(rhs)) < 0.001
+        case (let lhs?, let rhs?): abs(lhs.timeIntervalSince(rhs)) < 0.001
         case (nil, nil): true
         default: false
         }
@@ -601,23 +619,29 @@ enum DiskLedgerScanner {
             || path.hasPrefix("/Library/") || path == "/Library"
             || path.hasPrefix("/private/") || path == "/private"
             || path.hasPrefix("/usr/") || path == "/usr"
-            || path.hasPrefix("/opt/") || path == "/opt" {
+            || path.hasPrefix("/opt/") || path == "/opt"
+        {
             return .systemProtected
         }
         if lowerPath.hasPrefix("/applications/")
-            || lowerPath.hasPrefix(home.lowercased() + "/applications/") {
+            || lowerPath.hasPrefix(home.lowercased() + "/applications/")
+        {
             return .applications
         }
-        if containsAny(lowerPath, [
-            "/library/caches/", "/library/logs/", "/library/httpstorages/",
-            "/library/saved application state/", "/.cache/", "/.codex/.tmp/",
-            "/.gradle/caches/"
-        ]) || ["caches", "logs", ".cache", ".tmp", "tmp"].contains(name) {
+        if containsAny(
+            lowerPath,
+            [
+                "/library/caches/", "/library/logs/", "/library/httpstorages/",
+                "/library/saved application state/", "/.cache/", "/.codex/.tmp/",
+                "/.gradle/caches/",
+            ]) || ["caches", "logs", ".cache", ".tmp", "tmp"].contains(name)
+        {
             return .cacheTemporary
         }
         if lowerPath.contains("/library/mobile documents/")
             || lowerPath.contains("/library/cloudstorage/")
-            || lowerPath.contains("/library/mail/") {
+            || lowerPath.contains("/library/mail/")
+        {
             return .personalFiles
         }
         if lowerPath.contains("/library/") || name.hasPrefix(".") {
@@ -654,7 +678,7 @@ enum DiskLedgerScanner {
             kind: .deviceBackups,
             pathFragments: [
                 "/library/application support/mobilesync",
-                "/mobile backups/"
+                "/mobile backups/",
             ],
             nameFragments: ["iphone backup", "ipad backup", "手机备份"],
             extensions: []
@@ -663,7 +687,7 @@ enum DiskLedgerScanner {
             kind: .aiModels,
             pathFragments: [
                 "/.ollama", "/huggingface/", "/huggingface_hub/", "/models--",
-                "/stable-diffusion", "/comfyui/models", "/lm studio/"
+                "/stable-diffusion", "/comfyui/models", "/lm studio/",
             ],
             nameFragments: ["ollama", "huggingface", "lm studio", "comfyui"],
             extensions: ["gguf", "safetensors", "ckpt"]
@@ -672,7 +696,7 @@ enum DiskLedgerScanner {
             kind: .virtualMachines,
             pathFragments: [
                 "/parallels/", "/vmware/", "/utm/", "/virtualbox/", "/docker/",
-                "/library/developer/coresimulator/", "/containers/com.utmapp.utm/"
+                "/library/developer/coresimulator/", "/containers/com.utmapp.utm/",
             ],
             nameFragments: ["parallels", "vmware", "virtualbox", "docker", "模拟器"],
             extensions: ["pvm", "vmdk", "qcow2", "utm", "vmwarevm", "vdi"]
@@ -681,7 +705,7 @@ enum DiskLedgerScanner {
             kind: .games,
             pathFragments: [
                 "/steam/", "/steamapps/", "/epic games/", "/battle.net/",
-                "/riot games/", "/gog.com/", "/minecraft/"
+                "/riot games/", "/gog.com/", "/minecraft/",
             ],
             nameFragments: ["steam", "epic games", "battle.net", "minecraft", "游戏"],
             extensions: []
@@ -690,26 +714,26 @@ enum DiskLedgerScanner {
             kind: .creativeWork,
             pathFragments: [
                 "/adobe/", "/final cut", "/davinci resolve/", "/logic/",
-                "/blender/", "/affinity/", "/capture one/"
+                "/blender/", "/affinity/", "/capture one/",
             ],
             nameFragments: [
                 "photoshop", "illustrator", "premiere", "after effects", "final cut",
-                "davinci", "lightroom", "blender", "affinity", "剪映"
+                "davinci", "lightroom", "blender", "affinity", "剪映",
             ],
             extensions: [
                 "psd", "psb", "ai", "aep", "prproj", "fcpxlibrary", "imovielibrary",
-                "logicx", "blend"
+                "logicx", "blend",
             ]
         ),
         SceneRule(
             kind: .communication,
             pathFragments: [
                 "/library/mail", "/messages/", "wechat", "wework", "xinwechat",
-                "lark", "feishu", "telegram", "whatsapp", "dingtalk", "tencent.qq"
+                "lark", "feishu", "telegram", "whatsapp", "dingtalk", "tencent.qq",
             ],
             nameFragments: [
                 "wechat", "wework", "lark", "feishu", "telegram", "whatsapp",
-                "dingtalk", "tencent.qq", "微信", "企业微信", "飞书", "钉钉"
+                "dingtalk", "tencent.qq", "微信", "企业微信", "飞书", "钉钉",
             ],
             extensions: []
         ),
@@ -717,7 +741,7 @@ enum DiskLedgerScanner {
             kind: .cloudOffline,
             pathFragments: [
                 "/library/cloudstorage", "/library/mobile documents", "/onedrive/",
-                "/dropbox/", "/google drive/", "/icloud drive/", "/baidunetdisk/"
+                "/dropbox/", "/google drive/", "/icloud drive/", "/baidunetdisk/",
             ],
             nameFragments: ["onedrive", "dropbox", "google drive", "百度网盘", "坚果云"],
             extensions: []
@@ -727,11 +751,11 @@ enum DiskLedgerScanner {
             pathFragments: [
                 "/library/developer", "/library/android", "/.gradle", "/.android",
                 "/.cargo", "/.rustup", "/.pub-cache", "/.cocoapods", "/.dartserver",
-                "/.cursor", "/node_modules/", "/flutter/", "/androidstudioprojects/"
+                "/.cursor", "/node_modules/", "/flutter/", "/androidstudioprojects/",
             ],
             nameFragments: [
                 "xcode", "android studio", "jetbrains", "visual studio code", "vscode",
-                "cursor", "qoder", "kiro", "trae"
+                "cursor", "qoder", "kiro", "trae",
             ],
             extensions: ["xcodeproj", "xcworkspace"]
         ),
@@ -741,7 +765,7 @@ enum DiskLedgerScanner {
             nameFragments: ["photos library", "照片图库"],
             extensions: [
                 "jpg", "jpeg", "png", "heic", "tiff", "gif", "raw", "cr2", "nef",
-                "mov", "mp4", "mkv", "avi", "m4v", "photoslibrary"
+                "mov", "mp4", "mkv", "avi", "m4v", "photoslibrary",
             ]
         ),
         SceneRule(
@@ -749,7 +773,7 @@ enum DiskLedgerScanner {
             pathFragments: ["/downloads/"],
             nameFragments: [],
             extensions: ["dmg", "pkg", "iso", "zip", "rar", "7z", "tar", "gz"]
-        )
+        ),
     ]
 
     private static func risk(

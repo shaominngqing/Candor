@@ -36,10 +36,21 @@ jobs:
       - name: Show toolchain
         run: swift --version
 
+      - name: Check Swift formatting
+        run: swift format lint --configuration .swift-format --recursive Sources Tests Package.swift
+
       - name: Run tests
         env:
           NSUnbufferedIO: "YES"
         run: swift test --verbose
+
+      - name: Validate bundle metadata
+        run: |
+          set -euo pipefail
+          plutil -lint AppResources/Info.plist
+          plutil -lint AppResources/PrivacyInfo.xcprivacy
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' AppResources/Info.plist)" = "Candor"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' AppResources/Info.plist)" = "io.github.shaominngqing.candor"
 
       - name: Build app bundle
         run: ./Scripts/build-app.sh
@@ -47,7 +58,7 @@ jobs:
       - name: Verify architecture and signature
         run: |
           set -euo pipefail
-          file "dist/Candor.app/Contents/MacOS/YuJing" | grep -q "${{ matrix.arch }}"
+          file "dist/Candor.app/Contents/MacOS/Candor" | grep -q "${{ matrix.arch }}"
           codesign --verify --deep --strict --verbose=2 "dist/Candor.app"
 
       - name: Package app
@@ -91,6 +102,14 @@ jobs:
           pattern: Candor-*
           path: release
           merge-multiple: true
+
+      - name: Verify release checksums
+        run: |
+          set -euo pipefail
+          cd release
+          for checksum in *.sha256; do
+            shasum -a 256 -c "$checksum"
+          done
 
       - name: Publish GitHub prerelease
         env:

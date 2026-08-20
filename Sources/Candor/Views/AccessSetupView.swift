@@ -147,7 +147,8 @@ struct AccessSetupView: View {
                     Image(systemName: "plus")
                         .font(.caption.weight(.semibold))
                         .frame(width: 22, height: 22)
-                        .background(Color(nsColor: .quaternaryLabelColor).opacity(0.16), in: RoundedRectangle(cornerRadius: 5))
+                        .background(
+                            Color(nsColor: .quaternaryLabelColor).opacity(0.16), in: RoundedRectangle(cornerRadius: 5))
                     Text("列表里没有时，点击“+”添加 Candor")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -155,7 +156,9 @@ struct AccessSetupView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
             }
-            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .background(
+                Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .strokeBorder(Color(nsColor: .separatorColor).opacity(0.5))
