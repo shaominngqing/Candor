@@ -2,4 +2,5 @@
 .swiftpm/
 .DS_Store
 dist/
+artifacts/
 tmp/

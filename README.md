@@ -11,7 +11,7 @@
 <p align="center">
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-111111?style=flat-square&logo=apple">
   <img alt="Swift 5.10" src="https://img.shields.io/badge/Swift-5.10-F05138?style=flat-square&logo=swift&logoColor=white">
-  <img alt="Version 0.13.0" src="https://img.shields.io/badge/version-0.13.0-007AFF?style=flat-square">
+  <img alt="Version 0.13.1" src="https://img.shields.io/badge/version-0.13.1-007AFF?style=flat-square">
   <img alt="Local only" src="https://img.shields.io/badge/analysis-local%20only-34C759?style=flat-square">
   <a href="https://github.com/shaominngqing/Candor/actions/workflows/build-release.yml"><img alt="Build" src="https://github.com/shaominngqing/Candor/actions/workflows/build-release.yml/badge.svg"></a>
 </p>
@@ -99,15 +99,17 @@ Candor 不用一个含糊的“深度清理”按钮制造压力，而是把范�
 
 也可以选择有限扫描。有限模式会主动跳过受保护目录，相应容量进入“未归类”，扫描过程中不会逐个目录弹出权限请求。
 
-## 下载测试版
+## 下载与安装
 
-[前往 GitHub Releases 下载 Candor](https://github.com/shaominngqing/Candor/releases)
+[下载最新版 Candor](https://github.com/shaominngqing/Candor/releases/latest)
 
-- `arm64`：Apple Silicon Mac（M1、M2、M3、M4 及后续芯片）。
-- `x86_64`：Intel Mac。
-- 每个安装包同时提供 SHA-256 校验文件。
+1. 根据 Mac 芯片下载对应的 `.dmg`：`arm64` 用于 Apple Silicon，`x86_64` 用于 Intel。
+2. 双击 DMG，把 `Candor` 拖到同一窗口中的“应用程序”。
+3. 推出磁盘镜像，然后从“应用程序”打开 Candor。
 
-当前 Release 使用临时签名，尚未经过 Apple Developer ID 公证，仅供开发测试。正式公开分发前仍需完成签名、公证和 stapling。
+ZIP 作为不需要挂载磁盘镜像的备用下载保留；每个 DMG 和 ZIP 都提供 SHA-256 校验文件。
+
+当前公开版本使用临时签名，尚未经过 Apple Developer ID 公证。若 macOS 首次打开时提示无法验证开发者，请在 Finder 中按住 Control 点击 Candor，选择“打开”，再确认一次；无需也不建议关闭 Gatekeeper。正式免提示分发仍需完成签名、公证和 stapling。
 
 ## 本地运行
 
@@ -124,6 +126,12 @@ swift run Candor
 ```bash
 ./Scripts/build-app.sh
 open "dist/Candor.app"
+```
+
+为当前 Mac 生成 DMG 和备用 ZIP：
+
+```bash
+./Scripts/package-release.sh "$(uname -m)"
 ```
 
 运行测试：
@@ -150,7 +158,7 @@ Docs/images/        README 使用的产品截图
 
 ## 当前状态
 
-Candor 目前处于 **0.13.0 公开测试阶段**。核心扫描、空间对账、分级建议、应用关联分析和废纸篓删除流程已经可用，但仍应在重要数据已有备份的环境中测试。
+Candor 目前处于 **0.13.1 公开测试阶段**。核心扫描、空间对账、分级建议、应用关联分析和废纸篓删除流程已经可用，但仍应在重要数据已有备份的环境中测试。
 
 已知边界：
 
