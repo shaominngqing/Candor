@@ -39,7 +39,7 @@
     <key>NSAppDataUsageDescription</key>
     <string>Candor 需要统计应用数据的大小和来源，以区分缓存与用户数据。</string>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026 Candor</string>
+    <string>Copyright © 2026 shaomingqing</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>SUEnableAutomaticChecks</key>
