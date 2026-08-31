@@ -10,10 +10,22 @@ let package = Package(
     products: [
         .executable(name: "Candor", targets: ["Candor"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6")
+    ],
     targets: [
         .executableTarget(
             name: "Candor",
-            path: "Sources/Candor"
+            dependencies: [
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
+            path: "Sources/Candor",
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-rpath",
+                    "-Xlinker", "@executable_path/../Frameworks",
+                ])
+            ]
         ),
         .testTarget(
             name: "CandorTests",

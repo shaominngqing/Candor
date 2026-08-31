@@ -51,6 +51,8 @@ jobs:
           plutil -lint AppResources/PrivacyInfo.xcprivacy
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' AppResources/Info.plist)" = "Candor"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' AppResources/Info.plist)" = "io.github.shaominngqing.candor"
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' AppResources/Info.plist)"
+          /usr/libexec/PlistBuddy -c 'Print :SUFeedURL' AppResources/Info.plist | grep -q 'appcast-__CANDOR_ARCH__\.xml$'
 
       - name: Build app bundle
         run: ./Scripts/build-app.sh
@@ -59,6 +61,10 @@ jobs:
         run: |
           set -euo pipefail
           file "dist/Candor.app/Contents/MacOS/Candor" | grep -q "${{ matrix.arch }}"
+          test -d "dist/Candor.app/Contents/Frameworks/Sparkle.framework"
+          otool -L "dist/Candor.app/Contents/MacOS/Candor" | grep -q '@rpath/Sparkle.framework'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' dist/Candor.app/Contents/Info.plist)" = \
+            "https://github.com/shaominngqing/Candor/releases/latest/download/appcast-${{ matrix.arch }}.xml"
           codesign --verify --deep --strict --verbose=2 "dist/Candor.app"
 
       - name: Package DMG and ZIP
@@ -68,6 +74,16 @@ jobs:
           version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" AppResources/Info.plist)
           ./Scripts/package-release.sh "${{ matrix.arch }}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate signed update feed
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SPARKLE_PRIVATE_KEY"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | \
+            ./Scripts/generate-appcast.sh "${{ matrix.arch }}" "$GITHUB_REF_NAME" -
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
@@ -100,6 +116,12 @@ jobs:
           cd release
           for checksum in *.sha256; do
             shasum -a 256 -c "$checksum"
+          done
+          for architecture in arm64 x86_64; do
+            test -f "appcast-${architecture}.xml"
+            grep -q 'sparkle:edSignature=' "appcast-${architecture}.xml"
+            grep -q 'sparkle-signatures:' "appcast-${architecture}.xml"
+            grep -q "Candor-.*-macOS-${architecture}.zip" "appcast-${architecture}.xml"
           done
 
       - name: Publish GitHub release

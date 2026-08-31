@@ -11,7 +11,7 @@
 <p align="center">
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-111111?style=flat-square&logo=apple">
   <img alt="Swift 5.10" src="https://img.shields.io/badge/Swift-5.10-F05138?style=flat-square&logo=swift&logoColor=white">
-  <img alt="Version 0.13.1" src="https://img.shields.io/badge/version-0.13.1-007AFF?style=flat-square">
+  <img alt="Version 0.14.0" src="https://img.shields.io/badge/version-0.14.0-007AFF?style=flat-square">
   <img alt="Local only" src="https://img.shields.io/badge/analysis-local%20only-34C759?style=flat-square">
   <a href="https://github.com/shaominngqing/Candor/actions/workflows/build-release.yml"><img alt="Build" src="https://github.com/shaominngqing/Candor/actions/workflows/build-release.yml/badge.svg"></a>
 </p>
@@ -109,6 +109,8 @@ Candor 不用一个含糊的“深度清理”按钮制造压力，而是把范�
 
 ZIP 作为不需要挂载磁盘镜像的备用下载保留；每个 DMG 和 ZIP 都提供 SHA-256 校验文件。
 
+从 `0.14.0` 起，Candor 会每天自动检查一次稳定版更新。也可以随时从“Candor”菜单选择“检查软件更新…”。更新包通过 Ed25519 签名验证，确认后由应用完成替换并重新打开；自动检查和自动下载可以在系统“设置”窗口中分别关闭。
+
 当前公开版本使用临时签名，尚未经过 Apple Developer ID 公证。若 macOS 首次打开时提示无法验证开发者，请在 Finder 中按住 Control 点击 Candor，选择“打开”，再确认一次；无需也不建议关闭 Gatekeeper。正式免提示分发仍需完成签名、公证和 stapling。
 
 ## 本地运行
@@ -134,6 +136,14 @@ open "dist/Candor.app"
 ./Scripts/package-release.sh "$(uname -m)"
 ```
 
+为 GitHub Release 生成当前架构的签名更新源：
+
+```bash
+./Scripts/generate-appcast.sh "$(uname -m)" "v0.14.0"
+```
+
+更新私钥保存在 macOS 钥匙串和 GitHub Actions Secret 中，不应提交到仓库。
+
 运行测试：
 
 ```bash
@@ -152,13 +162,13 @@ Sources/Candor/
 └── Views/        原生 SwiftUI 界面
 
 Tests/CandorTests/  路径安全、分类、扫描复用与性能测试
-AppResources/       应用图标、Info.plist 与隐私清单
+AppResources/       应用图标、Info.plist、隐私清单与第三方许可
 Docs/images/        README 使用的产品截图
 ```
 
 ## 当前状态
 
-Candor 目前处于 **0.13.1 公开测试阶段**。核心扫描、空间对账、分级建议、应用关联分析和废纸篓删除流程已经可用，但仍应在重要数据已有备份的环境中测试。
+Candor 目前处于 **0.14.0 公开测试阶段**。核心扫描、空间对账、分级建议、应用关联分析、废纸篓删除和应用内更新流程已经可用，但仍应在重要数据已有备份的环境中测试。
 
 已知边界：
 
