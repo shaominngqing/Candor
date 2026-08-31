@@ -104,7 +104,7 @@ Candor 不用一个含糊的“深度清理”按钮制造压力，而是把范�
 [下载最新版 Candor](https://github.com/shaominngqing/Candor/releases/latest)
 
 1. 根据 Mac 芯片下载对应的 `.dmg`：`arm64` 用于 Apple Silicon，`x86_64` 用于 Intel。
-2. 双击 DMG，把 `Candor` 拖到同一窗口中的“应用程序”。
+2. 双击 DMG，按照窗口中的箭头把 `Candor` 拖到右侧“应用程序”。
 3. 推出磁盘镜像，然后从“应用程序”打开 Candor。
 
 ZIP 作为不需要挂载磁盘镜像的备用下载保留；每个 DMG 和 ZIP 都提供 SHA-256 校验文件。

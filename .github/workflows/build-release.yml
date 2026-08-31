@@ -37,7 +37,14 @@ jobs:
         run: swift --version
 
       - name: Check Swift formatting
-        run: swift format lint --configuration .swift-format --recursive Sources Tests Package.swift
+        run: |
+          swift format lint --strict --configuration .swift-format --recursive Sources Tests Package.swift
+          swift format lint --strict --configuration .swift-format Scripts/render-dmg-background.swift
+
+      - name: Check release scripts
+        run: |
+          zsh -n Scripts/build-app.sh Scripts/package-release.sh Scripts/generate-appcast.sh
+          osacompile -o "$RUNNER_TEMP/CandorDMGLayout.scpt" Scripts/layout-dmg.applescript
 
       - name: Run tests
         env:

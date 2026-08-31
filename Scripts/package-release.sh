@@ -13,14 +13,25 @@ base_name="Candor-${version}-macOS-${architecture}"
 zip_path="$artifacts_dir/${base_name}.zip"
 dmg_path="$artifacts_dir/${base_name}.dmg"
 staging_dir=$(mktemp -d "${TMPDIR:-/tmp}/candor-dmg.XXXXXX")
-mount_dir=$(mktemp -d "${TMPDIR:-/tmp}/candor-mount.XXXXXX")
-is_mounted=false
+layout_dir=$(mktemp -d "${TMPDIR:-/tmp}/candor-layout.XXXXXX")
+layout_dmg="$layout_dir/Candor-layout.dmg"
+verification_root=$(mktemp -d "${TMPDIR:-/tmp}/candor-verify.XXXXXX")
+verification_mount="$verification_root/mount"
+background_renderer="$project_root/Scripts/render-dmg-background.swift"
+layout_script="$project_root/Scripts/layout-dmg.applescript"
+layout_mount=""
+layout_device=""
+is_layout_mounted=false
+is_verification_mounted=false
 
 cleanup() {
-    if [[ "$is_mounted" == true ]]; then
-        /usr/bin/hdiutil detach -quiet "$mount_dir" || true
+    if [[ "$is_layout_mounted" == true ]]; then
+        /usr/bin/hdiutil detach -quiet "${layout_mount:-$layout_device}" || true
     fi
-    /bin/rm -rf "$staging_dir" "$mount_dir"
+    if [[ "$is_verification_mounted" == true ]]; then
+        /usr/bin/hdiutil detach -quiet "$verification_mount" || true
+    fi
+    /bin/rm -R -- "$staging_dir" "$layout_dir" "$verification_root"
 }
 trap cleanup EXIT
 
@@ -41,6 +52,8 @@ guard_file() {
 
 guard_file "$app_bundle"
 guard_file "$executable"
+guard_file "$background_renderer"
+guard_file "$layout_script"
 /usr/bin/file "$executable" | /usr/bin/grep -q "$architecture"
 /usr/bin/codesign --verify --deep --strict "$app_bundle"
 
@@ -51,14 +64,47 @@ mkdir -p "$artifacts_dir"
 
 /usr/bin/ditto "$app_bundle" "$staging_dir/Candor.app"
 /bin/ln -s /Applications "$staging_dir/Applications"
+/bin/mkdir -p "$staging_dir/.background"
+/usr/bin/xcrun swift "$background_renderer" "$staging_dir/.background/CandorDMG.png"
+/usr/bin/chflags hidden "$staging_dir/.background"
 /usr/bin/touch "$staging_dir/.metadata_never_index"
 /usr/bin/hdiutil create \
     -quiet \
     -volname "Candor $version" \
     -srcfolder "$staging_dir" \
-    -format UDZO \
+    -format UDRW \
     -ov \
-    "$dmg_path"
+    "$layout_dmg"
+
+attach_output=$(/usr/bin/hdiutil attach \
+    -readwrite \
+    -noverify \
+    -noautoopen \
+    -nobrowse \
+    -mountrandom /Volumes \
+    "$layout_dmg")
+layout_device=$(printf '%s\n' "$attach_output" | /usr/bin/awk '/^\/dev\// { print $1; exit }')
+layout_mount=$(printf '%s\n' "$attach_output" | /usr/bin/awk -F '\t' '$NF ~ /^\/Volumes\// { print $NF; exit }')
+is_layout_mounted=true
+guard_file "$layout_mount"
+disk_name=$(/usr/bin/basename "$layout_mount")
+/usr/bin/osascript "$layout_script" "$disk_name" "$layout_mount"
+/bin/sync
+for _ in {1..10}; do
+    [[ -f "$layout_mount/.DS_Store" ]] && break
+    /bin/sleep 1
+done
+guard_file "$layout_mount/.DS_Store"
+/usr/bin/hdiutil detach -quiet "$layout_mount"
+is_layout_mounted=false
+
+/usr/bin/hdiutil convert \
+    -quiet \
+    "$layout_dmg" \
+    -format UDZO \
+    -imagekey zlib-level=9 \
+    -ov \
+    -o "$dmg_path"
 
 if [[ "$codesign_identity" != "-" ]]; then
     /usr/bin/codesign --force --sign "$codesign_identity" --timestamp "$dmg_path"
@@ -66,15 +112,20 @@ if [[ "$codesign_identity" != "-" ]]; then
 fi
 
 /usr/bin/hdiutil verify -quiet "$dmg_path"
-is_mounted=true
-/usr/bin/hdiutil attach -quiet -nobrowse -readonly -mountpoint "$mount_dir" "$dmg_path"
-guard_file "$mount_dir/Candor.app"
-guard_file "$mount_dir/Applications"
-[[ "$(/usr/bin/readlink "$mount_dir/Applications")" == "/Applications" ]]
-/usr/bin/file "$mount_dir/Candor.app/Contents/MacOS/Candor" | /usr/bin/grep -q "$architecture"
-/usr/bin/codesign --verify --deep --strict "$mount_dir/Candor.app"
-/usr/bin/hdiutil detach -quiet "$mount_dir"
-is_mounted=false
+/bin/mkdir -p "$verification_mount"
+is_verification_mounted=true
+/usr/bin/hdiutil attach -quiet -nobrowse -readonly -mountpoint "$verification_mount" "$dmg_path"
+guard_file "$verification_mount/Candor.app"
+guard_file "$verification_mount/Applications"
+guard_file "$verification_mount/.background/CandorDMG.png"
+guard_file "$verification_mount/.DS_Store"
+[[ "$(/usr/bin/readlink "$verification_mount/Applications")" == "/Applications" ]]
+[[ "$(/usr/bin/sips -g pixelWidth "$verification_mount/.background/CandorDMG.png" | /usr/bin/awk '/pixelWidth:/ { print $2 }')" == "660" ]]
+[[ "$(/usr/bin/sips -g pixelHeight "$verification_mount/.background/CandorDMG.png" | /usr/bin/awk '/pixelHeight:/ { print $2 }')" == "420" ]]
+/usr/bin/file "$verification_mount/Candor.app/Contents/MacOS/Candor" | /usr/bin/grep -q "$architecture"
+/usr/bin/codesign --verify --deep --strict "$verification_mount/Candor.app"
+/usr/bin/hdiutil detach -quiet "$verification_mount"
+is_verification_mounted=false
 
 (
     cd "$artifacts_dir"
