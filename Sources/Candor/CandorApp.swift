@@ -21,7 +21,7 @@ struct CandorApp: App {
                 }
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1_180, height: 760)
+        .defaultSize(width: 1_260, height: 780)
         .commands {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesCommand(updateController: updateController)

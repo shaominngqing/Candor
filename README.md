@@ -115,7 +115,7 @@ ZIP 作为不需要挂载磁盘镜像的备用下载保留；每个 DMG 和 ZIP 
 
 ## 本地运行
 
-要求：macOS 13 或更高版本，以及支持 Swift 5.10 的 Xcode Command Line Tools。
+运行要求：macOS 13 或更高版本。为确保 SwiftUI 使用与产品截图一致的原生样式，正式发布包统一使用 Xcode 26.6 和 macOS 26 SDK 构建。
 
 ```bash
 git clone git@github.com:shaominngqing/Candor.git

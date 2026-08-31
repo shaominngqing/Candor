@@ -20,21 +20,30 @@ jobs:
     name: Build ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: arm64
-            runner: macos-15
+            runner: macos-26
           - arch: x86_64
-            runner: macos-15-intel
+            runner: macos-26-intel
 
     steps:
       - name: Check out source
         uses: actions/checkout@v7
 
       - name: Show toolchain
-        run: swift --version
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          swift --version
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          sdk_version=$(xcrun --sdk macosx --show-sdk-version)
+          echo "macOS SDK ${sdk_version}"
+          test "${sdk_version%%.*}" -ge 26
 
       - name: Check Swift formatting
         run: |
@@ -67,9 +76,16 @@ jobs:
       - name: Verify architecture and signature
         run: |
           set -euo pipefail
-          file "dist/Candor.app/Contents/MacOS/Candor" | grep -q "${{ matrix.arch }}"
+          executable="dist/Candor.app/Contents/MacOS/Candor"
+          file "$executable" | grep -q "${{ matrix.arch }}"
+          binary_sdk=$(otool -l "$executable" | awk '
+            $1 == "cmd" && $2 == "LC_BUILD_VERSION" { reading = 1; next }
+            reading && $1 == "sdk" { print $2; exit }
+          ')
+          echo "Linked macOS SDK ${binary_sdk}"
+          test "${binary_sdk%%.*}" -ge 26
           test -d "dist/Candor.app/Contents/Frameworks/Sparkle.framework"
-          otool -L "dist/Candor.app/Contents/MacOS/Candor" | grep -q '@rpath/Sparkle.framework'
+          otool -L "$executable" | grep -q '@rpath/Sparkle.framework'
           test "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' dist/Candor.app/Contents/Info.plist)" = \
             "https://github.com/shaominngqing/Candor/releases/latest/download/appcast-${{ matrix.arch }}.xml"
           codesign --verify --deep --strict --verbose=2 "dist/Candor.app"
